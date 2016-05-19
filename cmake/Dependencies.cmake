@@ -28,6 +28,11 @@ find_package(HDF5 COMPONENTS HL REQUIRED)
 include_directories(SYSTEM ${HDF5_INCLUDE_DIRS} ${HDF5_HL_INCLUDE_DIR})
 list(APPEND Caffe_LINKER_LIBS ${HDF5_LIBRARIES})
 
+# ---[ GPI2
+find_package(GPI2 REQUIRED)
+include_directories(SYSTEM ${GPI2_INCLUDE_DIR})
+list(APPEND Caffe_LINKER_LIBS ${GPI2_GPI_LIBRARIES})
+
 # ---[ LMDB
 if(USE_LMDB)
   find_package(LMDB REQUIRED)

@@ -9,9 +9,12 @@ macro(caffe_set_caffe_link)
       set(Caffe_LINK -Wl,-force_load caffe)
     elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
       set(Caffe_LINK -Wl,--whole-archive caffe -Wl,--no-whole-archive)
+    elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
+      set(Caffe_LINK -Wl,--whole-archive caffe -Wl,--no-whole-archive)
     endif()
   endif()
 endmacro()
+message(STATUS "compiler = ${CMAKE_CXX_COMPILER_ID}")
 ################################################################################################
 # Convenient command to setup source group for IDEs that support this feature (VS, XCode)
 # Usage:

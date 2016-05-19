@@ -1,5 +1,7 @@
 #include <GASPI.h>
 #include <cstdlib>
+#include <iostream>
+#include <stdio.h>
 
 #ifndef GASPIHELPER
 #define GASPIHELPER

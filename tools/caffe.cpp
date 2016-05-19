@@ -14,6 +14,7 @@ namespace bp = boost::python;
 #include "boost/algorithm/string.hpp"
 #include "caffe/caffe.hpp"
 #include "caffe/util/signal_handler.h"
+#include "caffe/util/GPIhelper.h"
 
 using caffe::Blob;
 using caffe::Caffe;
@@ -152,6 +153,9 @@ caffe::SolverAction::Enum GetRequestedAction(
 
 // Train / Finetune a model.
 int train() {
+  SUCCESS_OR_DIE(gaspi_proc_init(GASPI_BLOCK));
+
+
   CHECK_GT(FLAGS_solver.size(), 0) << "Need a solver definition to train.";
   CHECK(!FLAGS_snapshot.size() || !FLAGS_weights.size())
       << "Give a snapshot to resume training or weights to finetune "
@@ -220,6 +224,9 @@ int train() {
     solver->Solve();
   }
   LOG(INFO) << "Optimization Done.";
+
+  SUCCESS_OR_DIE(gaspi_proc_term (GASPI_BLOCK));
+
   return 0;
 }
 RegisterBrewFunction(train);

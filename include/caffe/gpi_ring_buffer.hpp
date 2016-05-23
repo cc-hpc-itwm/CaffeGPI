@@ -58,6 +58,7 @@ public:
 
   unsigned long GetNumData(void);
   int Read(Dtype* p, const unsigned long len);
+  int Add(Dtype* p, const unsigned long len);
 
 private:
 

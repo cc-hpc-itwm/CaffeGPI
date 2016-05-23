@@ -185,6 +185,46 @@ void RingBufferRead<Dtype>::UpdateWritePointer(void) {
 }
 
 template <typename Dtype>
+int RingBufferRead<Dtype>::Add(Dtype* p,
+                               const unsigned long len) {
+  static long counter = 0;
+  if (len > GetNumData()) return -1;
+  if (rp_ <= wp_) {
+    const Dtype* s = ((Dtype*) buffer) + rp_;
+    for (long i=0; i<len; i++)
+      p[i] += s[i];
+    rp_ += len;
+  } else {
+    const unsigned long chunk = std::min(len, size_ - rp_);
+    const unsigned long rest = len - chunk;
+    const Dtype* s = ((Dtype*)buffer) + rp_;
+    for (long i=0; i<chunk; i++)
+      p[i] += s[i];
+    rp_ += chunk;
+    rp_ = rp_ % size_;
+
+    if (rest > 0) {
+      const Dtype* s = ((Dtype*)buffer) + rp_;
+      Dtype* const d = p + chunk;
+      for (long i=0; i<rest; i++)
+        p[i] += s[i];
+      rp_ += rest;
+    }
+  }
+//  {
+//    gaspi_number_t entries;
+//    SUCCESS_OR_DIE(gaspi_queue_size(queue_, &entries));
+//    gaspi_printf("queue %lu\n", entries);
+//  }
+
+  gaspi_wait(queue_, GASPI_TEST);
+  SUCCESS_OR_DIE(gaspi_notify(segment_id_remote_, remote_rank_, notification_id_remote_,
+                              rp_ + 1, queue_, GASPI_BLOCK));
+//  gaspi_printf("rp: %lu\n", rp_);
+  return 0;
+}
+
+template <typename Dtype>
 int RingBufferRead<Dtype>::Read(Dtype* p,
                                 const unsigned long len) {
   static long counter = 0;

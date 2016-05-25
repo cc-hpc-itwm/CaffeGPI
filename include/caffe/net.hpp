@@ -6,11 +6,13 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <GASPI.h>
 
 #include "caffe/blob.hpp"
 #include "caffe/common.hpp"
 #include "caffe/layer.hpp"
 #include "caffe/proto/caffe.pb.h"
+#include "gpi_ring_buffer.hpp"
 
 namespace caffe {
 
@@ -88,6 +90,9 @@ class Net {
     Backward();
     return loss;
   }
+
+  // Communicate layers
+  void CommunicateLayerDiff(int layer_id);
 
   /// @brief Updates the network weights based on the diff values computed.
   void Update();
@@ -308,6 +313,21 @@ class Net {
   /// The root net that actually holds the shared layers in data parallelism
   const Net* const root_net_;
   DISABLE_COPY_AND_ASSIGN(Net);
+
+  //GPI communication
+  bool gpi_communication_;
+  gaspi_rank_t rank_;
+  gaspi_rank_t num_ranks_;
+  bool gpi_master_;
+  vector<unsigned long> learnable_params_size_aggregated_;
+  vector<RingBufferRead<Dtype> > com_buffers_read_;
+  vector<RingBufferWrite<Dtype> > com_buffers_write_;
+  vector<int> com_buffers_status_;
+  static const gaspi_rank_t gpi_master_rank_ = 0;
+  static const gaspi_queue_id_t queue_diff_ = 0;
+  static const gaspi_segment_id_t segment_id_diff_ = 0;
+  static const gaspi_segment_id_t segment_id_data_ = 1;
+  static const gaspi_notification_id_t notification_id_diff_ = 0;
 };
 
 

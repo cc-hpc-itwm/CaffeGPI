@@ -2,7 +2,6 @@
 
 #include <limits>
 #include <string.h>
-//#include <GASPI_Ext.h>
 
 namespace caffe {
 
@@ -67,7 +66,7 @@ int RingBufferWrite<Dtype>::Write(const Dtype* p,
            p,
            chunk * sizeof(Dtype));
 
-    gaspi_wait(queue_, GASPI_TEST);
+    gaspi_wait(queue_, GASPI_TEST);//todo wait only if queue full
 
     if (rest) {
       SUCCESS_OR_DIE(gaspi_write(segment_id_local_,
@@ -217,7 +216,7 @@ int RingBufferRead<Dtype>::Add(Dtype* p,
 //    gaspi_printf("queue %lu\n", entries);
 //  }
 
-  gaspi_wait(queue_, GASPI_TEST);
+  gaspi_wait(queue_, GASPI_TEST);//todo wait only if queue full
   SUCCESS_OR_DIE(gaspi_notify(segment_id_remote_, remote_rank_, notification_id_remote_,
                               rp_ + 1, queue_, GASPI_BLOCK));
 //  gaspi_printf("rp: %lu\n", rp_);
@@ -257,7 +256,7 @@ int RingBufferRead<Dtype>::Read(Dtype* p,
 //    gaspi_printf("queue %lu\n", entries);
 //  }
 
-  gaspi_wait(queue_, GASPI_TEST);
+  gaspi_wait(queue_, GASPI_TEST);//todo wait only if queue full
   SUCCESS_OR_DIE(gaspi_notify(segment_id_remote_, remote_rank_, notification_id_remote_,
                               rp_ + 1, queue_, GASPI_BLOCK));
 //  gaspi_printf("rp: %lu\n", rp_);
@@ -266,6 +265,8 @@ int RingBufferRead<Dtype>::Read(Dtype* p,
 
 template class RingBufferWrite<float>;
 template class RingBufferRead<float>;
+template class RingBufferWrite<double>;
+template class RingBufferRead<double>;
 template class RingBufferWrite<int>;
 template class RingBufferRead<int>;
 }

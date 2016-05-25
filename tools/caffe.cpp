@@ -225,6 +225,7 @@ int train() {
   }
   LOG(INFO) << "Optimization Done.";
 
+  SUCCESS_OR_DIE(gaspi_barrier(GASPI_GROUP_ALL, GASPI_BLOCK));
   SUCCESS_OR_DIE(gaspi_proc_term (GASPI_BLOCK));
 
   return 0;

@@ -28,19 +28,19 @@ private:
 
   int error_;
 
-  const unsigned long size_;
+  unsigned long size_;
   unsigned long rp_;
   unsigned long wp_;
   gaspi_pointer_t buffer;
 
-  const gaspi_segment_id_t segment_id_local_;
-  const gaspi_notification_id_t notification_id_local_;
-  const gaspi_offset_t buffer_offset_local_;
-  const gaspi_rank_t remote_rank_;
-  const gaspi_segment_id_t segment_id_remote_;
-  const gaspi_notification_id_t notification_id_remote_;
-  const gaspi_offset_t buffer_offset_remote_;
-  const gaspi_queue_id_t queue_;
+  gaspi_segment_id_t segment_id_local_;
+  gaspi_notification_id_t notification_id_local_;
+  gaspi_offset_t buffer_offset_local_;
+  gaspi_rank_t remote_rank_;
+  gaspi_segment_id_t segment_id_remote_;
+  gaspi_notification_id_t notification_id_remote_;
+  gaspi_offset_t buffer_offset_remote_;
+  gaspi_queue_id_t queue_;
 };
 
 template <typename Dtype>
@@ -66,19 +66,19 @@ private:
 
   int error_;
 
-  const unsigned long size_;
+  unsigned long size_;
   unsigned long rp_;
   unsigned long wp_;
   gaspi_pointer_t buffer;
 
-  const gaspi_segment_id_t segment_id_local_;
-  const gaspi_notification_id_t notification_id_local_;
-  const gaspi_offset_t buffer_offset_local_;
-  const gaspi_rank_t remote_rank_;
-  const gaspi_segment_id_t segment_id_remote_;
-  const gaspi_notification_id_t notification_id_remote_;
-  const gaspi_offset_t buffer_offset_remote_;
-  const gaspi_queue_id_t queue_;
+  gaspi_segment_id_t segment_id_local_;
+  gaspi_notification_id_t notification_id_local_;
+  gaspi_offset_t buffer_offset_local_;
+  gaspi_rank_t remote_rank_;
+  gaspi_segment_id_t segment_id_remote_;
+  gaspi_notification_id_t notification_id_remote_;
+  gaspi_offset_t buffer_offset_remote_;
+  gaspi_queue_id_t queue_;
 };
 
 

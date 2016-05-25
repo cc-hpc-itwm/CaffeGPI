@@ -286,8 +286,8 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
       const long s = learnable_params_[i]->count();
       learnable_params_size_aggregated_.push_back(learnable_params_size_aggregated_.back() + s);
     }
-    const long model_segment_size = learnable_params_size_aggregated_[learnable_params_.size()]
-                                    + learnable_params_.size() + 1;
+    const long model_segment_size =
+      learnable_params_size_aggregated_[learnable_params_.size()] + 1;
     SUCCESS_OR_DIE(gaspi_segment_create(segment_id_data_,
                                         model_segment_size * sizeof(Dtype),
                                         GASPI_GROUP_ALL,
@@ -301,7 +301,7 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
                                         GASPI_MEM_UNINITIALIZED));
     if (gpi_master_) {
       for (long remote_rank = 0; remote_rank < num_ranks_; remote_rank++) {
-        if (remote_rank == gpi_master_) continue;
+        if (remote_rank == gpi_master_rank_) continue;
         com_buffers_read_.push_back(RingBufferRead<Dtype>(
           model_segment_size, segment_id_diff_, notification_id_diff_ + remote_rank,
           remote_rank * model_segment_size * sizeof(Dtype),
@@ -632,15 +632,16 @@ void Net<Dtype>::BackwardFromTo(int start, int end) {
   //this is not correct in general
   for (int i = 0; i < com_buffers_status_.size(); i++)
     com_buffers_status_[i] = learnable_params_.size();
-  int current_learnable_parameter = learnable_params_.size();
+  int finished_learnable_parameter = learnable_params_.size();
   for (int i = start; i >= end; --i) {
     if (layer_need_backward_[i]) {
       layers_[i]->Backward(
           top_vecs_[i], bottom_need_backward_[i], bottom_vecs_[i]);
       if (debug_info_) { BackwardDebugInfo(i); }
-      CommunicateLayerDiff(--current_learnable_parameter);
+      CommunicateLayerDiff(--finished_learnable_parameter);
     }
   }
+  CommunicateLayerDiffBlocking(finished_learnable_parameter);
 }
 
 template <typename Dtype>
@@ -965,7 +966,6 @@ void Net<Dtype>::ToHDF5(const string& filename, bool write_diff) const {
   H5Fclose(file_hid);
 }
 
-// Communicate layers
 template <typename Dtype>
 void Net<Dtype>::CommunicateLayerDiff(int layer_id) {
   if (!gpi_communication_) return;
@@ -978,10 +978,10 @@ void Net<Dtype>::CommunicateLayerDiff(int layer_id) {
         if (update_layer < layer_id) break;
         if (buffer.Add(learnable_params_[update_layer]->mutable_cpu_diff(),
                        learnable_params_[update_layer]->count())) {
-          gaspi_printf("Add failed\n");
+//          gaspi_printf("Add failed\n");
           break;
         } else {
-          gaspi_printf("Add succeded\n");
+//          gaspi_printf("Add succeded\n");
           com_buffers_status_[i]--;
         }
       }
@@ -992,12 +992,81 @@ void Net<Dtype>::CommunicateLayerDiff(int layer_id) {
          --update_layer) {
       if (com_buffers_write_[0].Write(learnable_params_[update_layer]->cpu_diff(),
                                       learnable_params_[update_layer]->count())) {
-        gaspi_printf("Write failed\n");
+//        gaspi_printf("Write failed\n");
         break;
       } else {
-        gaspi_printf("Write succeded\n");
+//        gaspi_printf("Write succeded\n");
         com_buffers_status_[0]--;
       }
+    }
+  }
+}
+
+template <typename Dtype>
+void Net<Dtype>::CommunicateLayerDiffBlocking(int layer_id) {
+  while(!CommunicateLayerDiffFinished(layer_id)) {
+    CommunicateLayerDiff(layer_id);
+  }
+}
+
+template <typename Dtype>
+bool Net<Dtype>::CommunicateLayerDiffFinished(int layer_id) {
+  int running = 0;
+  for (long i = 0; i < com_buffers_status_.size(); i++) {
+    running |= (com_buffers_status_[i] > layer_id);
+  }
+  return !running;
+}
+
+template <typename Dtype>
+void Net<Dtype>::CommunicateData(void) {
+  if (!gpi_communication_) return;
+
+  gaspi_pointer_t p;
+  SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_data_, &p));
+  Dtype* const buffer((Dtype*)p);
+
+  if (gpi_master_) {
+    long index = 0;
+    for (int layer = 0; layer < learnable_params_.size(); layer++) {
+      memcpy(&buffer[index], learnable_params_[layer]->cpu_data(),
+             learnable_params_[layer]->count() * sizeof(Dtype));
+      index += learnable_params_[layer]->count();
+    }
+
+    gaspi_wait(queue_data_, GASPI_TEST);//todo wait only if queue full
+    for (int rank = 0; rank < num_ranks_; rank++) {
+      if (rank == gpi_master_rank_) continue;
+      SUCCESS_OR_DIE(gaspi_write_notify(segment_id_data_,
+                                        0,
+                                        rank,
+                                        segment_id_data_,
+                                        0,
+                                        index * sizeof(Dtype),
+                                        notification_id_data_,
+                                        1,
+                                        queue_data_,
+                                        GASPI_BLOCK));
+    }
+  } else {
+    while (1) {
+      gaspi_notification_id_t id;
+      gaspi_notification_t v;
+      SUCCESS_OR_DIE(gaspi_notify_waitsome(segment_id_data_,
+                                           notification_id_data_,
+                                           1,
+                                           &id,
+                                           GASPI_BLOCK));
+      SUCCESS_OR_DIE(gaspi_notify_reset(segment_id_data_,
+                                        notification_id_data_,
+                                        &v));
+      if (v > 0) break;
+    }
+    long index = 0;
+    for (int layer = 0; layer < learnable_params_.size(); layer++) {
+      memcpy(learnable_params_[layer]->mutable_cpu_data(), &buffer[index],
+             learnable_params_[layer]->count() * sizeof(Dtype));
+      index += learnable_params_[layer]->count();
     }
   }
 }

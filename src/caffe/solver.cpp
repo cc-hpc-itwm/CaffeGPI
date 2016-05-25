@@ -251,6 +251,7 @@ void Solver<Dtype>::Step(int iters) {
       callbacks_[i]->on_gradients_ready();
     }
     ApplyUpdate();
+    net_->CommunicateData();
 
     // Increment the internal iter_ counter -- its value should always indicate
     // the number of times the weights have been updated.

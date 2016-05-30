@@ -316,6 +316,8 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
         queue_diff_));
       com_buffers_status_.push_back(0);
     }
+
+    CommunicateData();
   }
 }
 

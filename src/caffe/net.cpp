@@ -1066,9 +1066,10 @@ void Net<Dtype>::CommunicateData(void) {
     }
     long index = 0;
     for (int layer = 0; layer < learnable_params_.size(); layer++) {
-      memcpy(learnable_params_[layer]->mutable_cpu_data(), &buffer[index],
-             learnable_params_[layer]->count() * sizeof(Dtype));
-      index += learnable_params_[layer]->count();
+      Blob<Dtype>& blob = *learnable_params_[layer];
+      memcpy(blob.mutable_cpu_data(), &buffer[index],
+             blob.count() * sizeof(Dtype));
+      index += blob.count();
     }
   }
 }

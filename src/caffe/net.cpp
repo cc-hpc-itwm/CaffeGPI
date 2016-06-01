@@ -287,13 +287,15 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
       learnable_params_size_aggregated_.push_back(learnable_params_size_aggregated_.back() + s);
     }
     const long model_segment_size =
-      learnable_params_size_aggregated_[learnable_params_.size()] + 1;
+      learnable_params_size_aggregated_[learnable_params_.size()];
     SUCCESS_OR_DIE(gaspi_segment_create(segment_id_data_,
                                         model_segment_size * sizeof(Dtype),
                                         GASPI_GROUP_ALL,
                                         GASPI_BLOCK,
                                         GASPI_MEM_UNINITIALIZED));
-    const long diff_segment_size = model_segment_size * (gpi_master_ ? num_ranks_ : 1);
+    const long diff_buffer_size = //can store full model
+      learnable_params_size_aggregated_[learnable_params_.size()] + 1;
+    const long diff_segment_size = diff_buffer_size * (gpi_master_ ? num_ranks_ : 1);
     SUCCESS_OR_DIE(gaspi_segment_create(segment_id_diff_,
                                         diff_segment_size * sizeof(Dtype),
                                         GASPI_GROUP_ALL,
@@ -309,16 +311,16 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
       for (long remote_rank = 0; remote_rank < num_ranks_; remote_rank++) {
         if (remote_rank == gpi_master_rank_) continue;
         com_buffers_read_.push_back(RingBufferRead<Dtype>(
-          model_segment_size, segment_id_diff_, notification_id_diff_ + remote_rank,
-          remote_rank * model_segment_size * sizeof(Dtype),
+          diff_buffer_size, segment_id_diff_, notification_id_diff_ + remote_rank,
+          remote_rank * diff_buffer_size * sizeof(Dtype),
           remote_rank, segment_id_diff_, notification_id_diff_, 0,
           queue_diff_));
         com_buffers_status_.push_back(0);
       }
     } else {
       com_buffers_write_.push_back(RingBufferWrite<Dtype>(
-        model_segment_size, segment_id_diff_, notification_id_diff_, 0,
-        gpi_master_rank_, segment_id_diff_, notification_id_diff_ + rank_, rank_ *  model_segment_size * sizeof(Dtype),
+        diff_buffer_size, segment_id_diff_, notification_id_diff_, 0,
+        gpi_master_rank_, segment_id_diff_, notification_id_diff_ + rank_, rank_ *  diff_buffer_size * sizeof(Dtype),
         queue_diff_));
       com_buffers_status_.push_back(0);
     }

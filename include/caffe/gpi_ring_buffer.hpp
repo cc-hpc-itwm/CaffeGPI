@@ -25,6 +25,7 @@ public:
 private:
 
   void UpdateReadPointer(void);
+  void ClearQueue(void);
 
   int error_;
 
@@ -41,6 +42,7 @@ private:
   gaspi_notification_id_t notification_id_remote_;
   gaspi_offset_t buffer_offset_remote_;
   gaspi_queue_id_t queue_;
+  gaspi_uint queue_depth_;
 };
 
 template <typename Dtype>
@@ -63,6 +65,7 @@ public:
 private:
 
   void UpdateWritePointer(void);
+  void ClearQueue(void);
 
   int error_;
 
@@ -79,6 +82,7 @@ private:
   gaspi_notification_id_t notification_id_remote_;
   gaspi_offset_t buffer_offset_remote_;
   gaspi_queue_id_t queue_;
+  gaspi_uint queue_depth_;
 };
 
 

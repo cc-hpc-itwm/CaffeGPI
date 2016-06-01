@@ -33,6 +33,10 @@ RingBufferWrite<Dtype>::RingBufferWrite(const unsigned long buffer_size,
 
     SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_local, &buffer));
     buffer = ((char*)buffer) + buffer_offset_local;
+
+    gaspi_config_t config;
+    SUCCESS_OR_DIE(gaspi_config_get(&config));
+    queue_depth_ = config.queue_depth;
   }
 
 template <typename Dtype>
@@ -66,7 +70,7 @@ int RingBufferWrite<Dtype>::Write(const Dtype* p,
            p,
            chunk * sizeof(Dtype));
 
-    gaspi_wait(queue_, GASPI_TEST);//todo wait only if queue full
+    ClearQueue();
 
     if (rest) {
       SUCCESS_OR_DIE(gaspi_write(segment_id_local_,
@@ -132,6 +136,16 @@ int RingBufferWrite<Dtype>::Write(const Dtype* p,
   return 0;
 }
 
+template <typename Dtype>
+void RingBufferWrite<Dtype>::ClearQueue(void) {
+  gaspi_number_t entries;
+  SUCCESS_OR_DIE(gaspi_queue_size(queue_, &entries));
+
+  if ((long(queue_depth_) - long(entries)) < 10) {
+    SUCCESS_OR_DIE(gaspi_wait(queue_, GASPI_BLOCK));
+  }
+}
+
 //----------------------------------------------------------------------------
 
 template <typename Dtype>
@@ -162,6 +176,10 @@ RingBufferRead<Dtype>::RingBufferRead(const unsigned long buffer_size,
 
     SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_local, &buffer));
     buffer = ((char*)buffer) + buffer_offset_local;
+
+    gaspi_config_t config;
+    SUCCESS_OR_DIE(gaspi_config_get(&config));
+    queue_depth_ = config.queue_depth;
   }
 
 template <typename Dtype>
@@ -216,7 +234,7 @@ int RingBufferRead<Dtype>::Add(Dtype* p,
 //    gaspi_printf("queue %lu\n", entries);
 //  }
 
-  gaspi_wait(queue_, GASPI_TEST);//todo wait only if queue full
+  ClearQueue();
   SUCCESS_OR_DIE(gaspi_notify(segment_id_remote_, remote_rank_, notification_id_remote_,
                               rp_ + 1, queue_, GASPI_BLOCK));
 //  gaspi_printf("rp: %lu\n", rp_);
@@ -256,11 +274,21 @@ int RingBufferRead<Dtype>::Read(Dtype* p,
 //    gaspi_printf("queue %lu\n", entries);
 //  }
 
-  gaspi_wait(queue_, GASPI_TEST);//todo wait only if queue full
+  ClearQueue();
   SUCCESS_OR_DIE(gaspi_notify(segment_id_remote_, remote_rank_, notification_id_remote_,
                               rp_ + 1, queue_, GASPI_BLOCK));
 //  gaspi_printf("rp: %lu\n", rp_);
   return 0;
+}
+
+template <typename Dtype>
+void RingBufferRead<Dtype>::ClearQueue(void) {
+  gaspi_number_t entries;
+  SUCCESS_OR_DIE(gaspi_queue_size(queue_, &entries));
+
+  if ((long(queue_depth_) - long(entries)) < 10) {
+    SUCCESS_OR_DIE(gaspi_wait(queue_, GASPI_BLOCK));
+  }
 }
 
 template class RingBufferWrite<float>;

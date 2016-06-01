@@ -299,6 +299,12 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
                                         GASPI_GROUP_ALL,
                                         GASPI_BLOCK,
                                         GASPI_MEM_UNINITIALIZED));
+    const long loss_segment_size = num_ranks_;
+    SUCCESS_OR_DIE(gaspi_segment_create(segment_id_loss_,
+                                        loss_segment_size * sizeof(Dtype),
+                                        GASPI_GROUP_ALL,
+                                        GASPI_BLOCK,
+                                        GASPI_MEM_UNINITIALIZED));
     if (gpi_master_) {
       for (long remote_rank = 0; remote_rank < num_ranks_; remote_rank++) {
         if (remote_rank == gpi_master_rank_) continue;

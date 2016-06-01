@@ -86,9 +86,11 @@ class Net {
   void Reshape();
 
   Dtype ForwardBackward() {
-    Dtype loss;
-    Forward(&loss);
+    Dtype loss = ForwardFromToLocal(0, layers_.size() - 1);
+    CommunicateLossSend(loss);
     Backward();
+    CommunicateLossCollect(loss);
+
     return loss;
   }
 

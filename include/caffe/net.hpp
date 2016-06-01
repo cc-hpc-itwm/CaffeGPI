@@ -96,6 +96,8 @@ class Net {
   void CommunicateLayerDiffBlocking(int layer_id);
   bool CommunicateLayerDiffFinished(int layer_id);
   void CommunicateData(void);
+  void CommunicateLossSend(Dtype loss);
+  void CommunicateLossCollect(Dtype& loss);
 
   /// @brief Updates the network weights based on the diff values computed.
   void Update();
@@ -329,10 +331,13 @@ class Net {
   static const gaspi_rank_t gpi_master_rank_ = 0;
   static const gaspi_queue_id_t queue_diff_ = 0;
   static const gaspi_queue_id_t queue_data_ = 1;
+  static const gaspi_queue_id_t queue_loss_ = 2;
   static const gaspi_segment_id_t segment_id_diff_ = 0;
   static const gaspi_segment_id_t segment_id_data_ = 1;
+  static const gaspi_segment_id_t segment_id_loss_ = 2;
   static const gaspi_notification_id_t notification_id_diff_ = 0;
   static const gaspi_notification_id_t notification_id_data_ = 0;
+  static const gaspi_notification_id_t notification_id_loss_ = 0;
 };
 
 

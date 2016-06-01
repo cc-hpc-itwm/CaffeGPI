@@ -1075,6 +1075,66 @@ void Net<Dtype>::CommunicateData(void) {
 }
 
 template <typename Dtype>
+void Net<Dtype>::CommunicateLossSend(Dtype loss) {
+  if (!gpi_communication_) return;
+
+  gaspi_pointer_t p;
+  SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_loss_, &p));
+  Dtype* const buffer((Dtype*)p);
+
+  buffer[rank_] = loss;
+  SUCCESS_OR_DIE(gaspi_notify(segment_id_loss_,
+                              rank_,
+                              notification_id_loss_ + rank_,
+                              1,
+                              queue_loss_,
+                              GASPI_BLOCK));
+
+  for (long remote_rank = 0; remote_rank < num_ranks_; remote_rank++) {
+    if (remote_rank == rank_) continue;
+    SUCCESS_OR_DIE(gaspi_write_notify(segment_id_loss_,
+                                      rank_ * sizeof(Dtype),
+                                      remote_rank,
+                                      segment_id_loss_,
+                                      rank_ * sizeof(Dtype),
+                                      sizeof(Dtype),
+                                      notification_id_loss_ + rank_,
+                                      1,//zero is not allowed as notification
+                                      queue_loss_,
+                                      GASPI_BLOCK));
+  }
+}
+
+template <typename Dtype>
+void Net<Dtype>::CommunicateLossCollect(Dtype& loss) {
+  if (!gpi_communication_) return;
+
+  gaspi_pointer_t p;
+  SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_loss_, &p));
+  Dtype* const buffer((Dtype*)p);
+
+  loss = 0;
+  for (long remote_rank = 0; remote_rank < num_ranks_; remote_rank++) {
+    while (1) {
+      gaspi_notification_id_t id;
+      gaspi_notification_t v;
+      SUCCESS_OR_DIE(gaspi_notify_waitsome(segment_id_loss_,
+                                           notification_id_loss_ + remote_rank,
+                                           1,
+                                           &id,
+                                           GASPI_BLOCK));
+      SUCCESS_OR_DIE(gaspi_notify_reset(segment_id_loss_,
+                                        notification_id_loss_ + remote_rank,
+                                        &v));
+      if (v > 0) break;
+    }
+    loss += buffer[remote_rank];
+  }
+
+  SUCCESS_OR_DIE(gaspi_wait(queue_loss_, GASPI_BLOCK));
+}
+
+template <typename Dtype>
 void Net<Dtype>::Update() {
   for (int i = 0; i < learnable_params_.size(); ++i) {
     learnable_params_[i]->Update();

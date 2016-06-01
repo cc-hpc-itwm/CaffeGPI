@@ -5,6 +5,8 @@
 #include "caffe/layers/pooling_layer.hpp"
 #include "caffe/util/math_functions.hpp"
 
+//#include <GASPI_Ext.h>
+
 namespace caffe {
 
 using std::min;
@@ -256,7 +258,9 @@ void PoolingLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
             const int index = ph * pooled_width_ + pw;
             const int bottom_index =
                 use_top_mask ? top_mask[index] : mask[index];
+//todo bottom_index can be less then 0, should be debugged further
             bottom_diff[bottom_index] += top_diff[index];
+            //if (bottom_index<0) gaspi_printf("NoNo %d\n", bottom_index);
           }
         }
         bottom_diff += bottom[0]->offset(0, 1);

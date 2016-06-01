@@ -54,6 +54,7 @@ class Net {
    * included.
    */
   Dtype ForwardFromTo(int start, int end);
+  Dtype ForwardFromToLocal(int start, int end);
   Dtype ForwardFrom(int start);
   Dtype ForwardTo(int end);
   /// @brief DEPRECATED; set input blobs then use Forward() instead.
@@ -98,6 +99,7 @@ class Net {
   void CommunicateData(void);
   void CommunicateLossSend(Dtype loss);
   void CommunicateLossCollect(Dtype& loss);
+  gaspi_datatype_t GetGPI2DataType(void);
 
   /// @brief Updates the network weights based on the diff values computed.
   void Update();

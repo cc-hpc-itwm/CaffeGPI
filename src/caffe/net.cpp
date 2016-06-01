@@ -580,6 +580,25 @@ void Net<Dtype>::AppendParam(const NetParameter& param, const int layer_id,
 
 template <typename Dtype>
 Dtype Net<Dtype>::ForwardFromTo(int start, int end) {
+  Dtype loss = ForwardFromToLocal(start, end);
+
+  if (gpi_communication_) {
+    Dtype receive;
+    SUCCESS_OR_DIE(gaspi_allreduce(&loss,
+                                   &receive,
+                                   1,
+                                   GASPI_OP_SUM,
+                                   GetGPI2DataType(),
+                                   GASPI_GROUP_ALL,
+                                   GASPI_BLOCK));
+    loss = receive;
+  }
+
+  return loss;
+}
+
+template <typename Dtype>
+Dtype Net<Dtype>::ForwardFromToLocal(int start, int end) {
   CHECK_GE(start, 0);
   CHECK_LT(end, layers_.size());
   Dtype loss = 0;
@@ -1132,6 +1151,16 @@ void Net<Dtype>::CommunicateLossCollect(Dtype& loss) {
   }
 
   SUCCESS_OR_DIE(gaspi_wait(queue_loss_, GASPI_BLOCK));
+}
+
+template <>
+gaspi_datatype_t Net<float>::GetGPI2DataType(void) {
+  return GASPI_TYPE_FLOAT;
+}
+
+template <>
+gaspi_datatype_t Net<double>::GetGPI2DataType(void) {
+  return GASPI_TYPE_DOUBLE;
 }
 
 template <typename Dtype>

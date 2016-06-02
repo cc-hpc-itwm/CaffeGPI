@@ -62,6 +62,8 @@ template <typename Dtype>
 int RingBufferWrite<Dtype>::Write(const Dtype* p,
                                   const unsigned long len) {
   if (len > GetFreeSpace()) return -1;
+  ClearQueue();
+
   if (rp_ <= wp_) {
     //first chunk
     const long chunk = std::min(len, size_ - wp_);
@@ -69,8 +71,6 @@ int RingBufferWrite<Dtype>::Write(const Dtype* p,
     memcpy(((char*)buffer) + wp_ * sizeof(Dtype),
            p,
            chunk * sizeof(Dtype));
-
-    ClearQueue();
 
     if (rest) {
       SUCCESS_OR_DIE(gaspi_write(segment_id_local_,
@@ -141,7 +141,7 @@ void RingBufferWrite<Dtype>::ClearQueue(void) {
   gaspi_number_t entries;
   SUCCESS_OR_DIE(gaspi_queue_size(queue_, &entries));
 
-  if ((long(queue_depth_) - long(entries)) < 10) {
+  if ((long(queue_depth_) - long(entries)) < 3) {
     SUCCESS_OR_DIE(gaspi_wait(queue_, GASPI_BLOCK));
   }
 }
@@ -286,7 +286,7 @@ void RingBufferRead<Dtype>::ClearQueue(void) {
   gaspi_number_t entries;
   SUCCESS_OR_DIE(gaspi_queue_size(queue_, &entries));
 
-  if ((long(queue_depth_) - long(entries)) < 10) {
+  if ((long(queue_depth_) - long(entries)) < 1) {
     SUCCESS_OR_DIE(gaspi_wait(queue_, GASPI_BLOCK));
   }
 }

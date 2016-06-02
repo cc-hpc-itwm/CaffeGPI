@@ -95,13 +95,8 @@ class Net {
   }
 
   // Communicate layers
-  void CommunicateLayerDiff(int layer_id);
-  void CommunicateLayerDiffBlocking(int layer_id);
-  bool CommunicateLayerDiffFinished(int layer_id);
   void CommunicateData(void);
-  void CommunicateLossSend(Dtype loss);
-  void CommunicateLossCollect(Dtype& loss);
-  gaspi_datatype_t GetGPI2DataType(void);
+  bool AmIGPIMaster(void) {return gpi_master_;}
 
   /// @brief Updates the network weights based on the diff values computed.
   void Update();
@@ -261,6 +256,14 @@ class Net {
   void BackwardDebugInfo(const int layer_id);
   /// @brief Helper for displaying debug info in Update.
   void UpdateDebugInfo(const int param_id);
+
+  // Communicate layers
+  void CommunicateLayerDiff(int layer_id);
+  void CommunicateLayerDiffBlocking(int layer_id);
+  bool CommunicateLayerDiffFinished(int layer_id);
+  void CommunicateLossSend(Dtype loss);
+  void CommunicateLossCollect(Dtype& loss);
+  gaspi_datatype_t GetGPI2DataType(void);
 
   /// @brief The network name
   string name_;

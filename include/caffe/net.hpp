@@ -261,6 +261,7 @@ class Net {
   void CommunicateLayerDiff(int layer_id);
   void CommunicateLayerDiffBlocking(int layer_id);
   bool CommunicateLayerDiffFinished(int layer_id);
+  void ScaleLayerDiff(Dtype s);
   void CommunicateLossSend(Dtype loss);
   void CommunicateLossCollect(Dtype& loss);
   gaspi_datatype_t GetGPI2DataType(void);

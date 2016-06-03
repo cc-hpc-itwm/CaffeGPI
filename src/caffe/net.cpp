@@ -671,6 +671,7 @@ void Net<Dtype>::BackwardFromTo(int start, int end) {
     }
   }
   CommunicateLayerDiffBlocking(finished_learnable_parameter);
+  ScaleLayerDiff(1./Dtype(num_ranks_));
 }
 
 template <typename Dtype>
@@ -1045,6 +1046,13 @@ bool Net<Dtype>::CommunicateLayerDiffFinished(int layer_id) {
     running |= (com_buffers_status_[i] > layer_id);
   }
   return !running;
+}
+
+template <typename Dtype>
+void Net<Dtype>::ScaleLayerDiff(Dtype s) {
+  for (long i = 0; i < learnable_params_.size(); i++) {
+    learnable_params_[i]->scale_diff(s);
+  }
 }
 
 template <typename Dtype>

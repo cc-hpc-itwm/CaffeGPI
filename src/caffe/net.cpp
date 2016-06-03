@@ -590,17 +590,17 @@ template <typename Dtype>
 Dtype Net<Dtype>::ForwardFromTo(int start, int end) {
   Dtype loss = ForwardFromToLocal(start, end);
 
-  if (gpi_communication_) {
-    Dtype receive;
-    SUCCESS_OR_DIE(gaspi_allreduce(&loss,
-                                   &receive,
-                                   1,
-                                   GASPI_OP_SUM,
-                                   GetGPI2DataType(),
-                                   GASPI_GROUP_ALL,
-                                   GASPI_BLOCK));
-    loss = receive;
-  }
+//  if (gpi_communication_) {
+//    Dtype receive;
+//    SUCCESS_OR_DIE(gaspi_allreduce(&loss,
+//                                   &receive,
+//                                   1,
+//                                   GASPI_OP_SUM,
+//                                   GetGPI2DataType(),
+//                                   GASPI_GROUP_ALL,
+//                                   GASPI_BLOCK));
+//    loss = receive;
+//  }
 
   return loss;
 }

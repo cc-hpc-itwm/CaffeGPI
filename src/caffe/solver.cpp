@@ -250,7 +250,7 @@ void Solver<Dtype>::Step(int iters) {
     for (int i = 0; i < callbacks_.size(); ++i) {
       callbacks_[i]->on_gradients_ready();
     }
-    ApplyUpdate();
+    if (net_->AmIGPIMaster()) ApplyUpdate();
     net_->CommunicateData();
 
     // Increment the internal iter_ counter -- its value should always indicate
@@ -409,6 +409,8 @@ void Solver<Dtype>::Test(const int test_net_id) {
 
 template <typename Dtype>
 void Solver<Dtype>::Snapshot() {
+  if (!net_->AmIGPIMaster()) return;
+
   CHECK(Caffe::root_solver());
   string model_filename;
   switch (param_.snapshot_format()) {

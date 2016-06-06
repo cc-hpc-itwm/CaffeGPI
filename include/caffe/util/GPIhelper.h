@@ -1,5 +1,5 @@
 #include <GASPI.h>
-#include <GASPI_Ext.h>
+//#include <GASPI_Ext.h>
 #include <cstdlib>
 #include <iostream>
 #include <stdio.h>
@@ -14,15 +14,12 @@ do                                                                      \
                          						\
     if (r != GASPI_SUCCESS)                                             \
     {                                          				\
-        std::cout << std::getenv("HOSTNAME") <<" "<<r<< " '" << gaspi_error_str(r) << "' ASGD FAIL at " << __FILE__<< " "<<__LINE__<<std::endl;   \
+        std::cout << std::getenv("HOSTNAME") <<" "<<r<< " '" << "' ASGD FAIL at " << __FILE__<< " "<<__LINE__<<std::endl;   \
         fflush (stdout);                                                \
                                                                         \
         exit (EXIT_FAILURE);                                            \
     }                                                                   \
 }while (0)
-
-#endif
-
 
 #define SUCCESS_OR_LOG(f...)                                            \
 do                                                                      \
@@ -35,3 +32,4 @@ do                                                                      \
     }                                                                   \
 }while (0)
 
+#endif

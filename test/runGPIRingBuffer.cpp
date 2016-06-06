@@ -2,7 +2,7 @@
 #include "caffe/util/GPIhelper.h"
 #include <iostream>
 #include <stdlib.h>
-#include <GASPI_Ext.h>
+//#include <GASPI_Ext.h>
 
 
 //void quick() {

@@ -37,7 +37,7 @@ RingBufferWrite<Dtype>::RingBufferWrite(const unsigned long buffer_size,
     gaspi_config_t config;
     SUCCESS_OR_DIE(gaspi_config_get(&config));
     queue_depth_ = config.queue_depth;
-  }
+}
 
 template <typename Dtype>
 unsigned long RingBufferWrite<Dtype>::GetFreeSpace(void) {
@@ -180,7 +180,7 @@ RingBufferRead<Dtype>::RingBufferRead(const unsigned long buffer_size,
     gaspi_config_t config;
     SUCCESS_OR_DIE(gaspi_config_get(&config));
     queue_depth_ = config.queue_depth;
-  }
+}
 
 template <typename Dtype>
 unsigned long RingBufferRead<Dtype>::GetNumData(void) {
@@ -204,7 +204,6 @@ void RingBufferRead<Dtype>::UpdateWritePointer(void) {
 template <typename Dtype>
 int RingBufferRead<Dtype>::Add(Dtype* p,
                                const unsigned long len) {
-  static long counter = 0;
   if (len > GetNumData()) return -1;
   if (rp_ <= wp_) {
     const Dtype* s = ((Dtype*) buffer) + rp_;
@@ -224,7 +223,7 @@ int RingBufferRead<Dtype>::Add(Dtype* p,
       const Dtype* s = ((Dtype*)buffer) + rp_;
       Dtype* const d = p + chunk;
       for (long i=0; i<rest; i++)
-        p[i] += s[i];
+        d[i] += s[i];
       rp_ += rest;
     }
   }
@@ -244,7 +243,6 @@ int RingBufferRead<Dtype>::Add(Dtype* p,
 template <typename Dtype>
 int RingBufferRead<Dtype>::Read(Dtype* p,
                                 const unsigned long len) {
-  static long counter = 0;
   if (len > GetNumData()) return -1;
   if (rp_ <= wp_) {
     memcpy(p,

@@ -2,6 +2,7 @@
 #include "caffe/util/GPIhelper.h"
 #include <iostream>
 #include <stdlib.h>
+#include <unistd.h>
 //#include <GASPI_Ext.h>
 
 
@@ -185,7 +186,7 @@ int main() {
         for (long i=0; i<chunk; i++) {
           check |= (bite[i] != ++counter);
         }
-        if (check) gaspi_printf("Error in Block starting with %ld\n", counter-chunk);
+//        if (check) gaspi_printf("Error in Block starting with %ld\n", counter-chunk);
 //        gaspi_printf("%lu\n", counter);
         //usleep(1);
       }

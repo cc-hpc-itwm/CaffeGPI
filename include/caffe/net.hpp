@@ -261,10 +261,12 @@ class Net {
   void CommunicateLayerDiff(int layer_id);
   void CommunicateLayerDiffBlocking(int layer_id);
   bool CommunicateLayerDiffFinished(int layer_id);
+  bool CommunicateLayerDiffReadFinished(int layer_id);
   void ScaleLayerDiff(Dtype s);
   void CommunicateLossSend(Dtype loss);
   void CommunicateLossCollect(Dtype& loss);
   gaspi_datatype_t GetGPI2DataType(void);
+  void ResetComBuffersStatus(void);
 
   /// @brief The network name
   string name_;
@@ -335,7 +337,8 @@ class Net {
   vector<unsigned long> learnable_params_size_aggregated_;
   vector<RingBufferRead<Dtype> > com_buffers_read_;
   vector<RingBufferWrite<Dtype> > com_buffers_write_;
-  vector<int> com_buffers_status_;
+  vector<int> com_buffers_read_status_;
+  vector<int> com_buffers_write_status_;
   gaspi_notification_id_t loss_buffer_index_;
   static const gaspi_rank_t gpi_master_rank_ = 0;
   static const gaspi_queue_id_t queue_diff_ = 0;

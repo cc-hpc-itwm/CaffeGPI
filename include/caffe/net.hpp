@@ -258,6 +258,7 @@ class Net {
   void UpdateDebugInfo(const int param_id);
 
   // Communicate layers
+  void BuildLayerDiffCommunication();
   void CommunicateLayerDiff(int layer_id);
   void CommunicateLayerDiffBlocking(int layer_id);
   bool CommunicateLayerDiffFinished(int layer_id);

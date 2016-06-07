@@ -286,6 +286,7 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
       const long s = learnable_params_[i]->count();
       learnable_params_size_aggregated_.push_back(learnable_params_size_aggregated_.back() + s);
     }
+    loss_buffer_index_ = 0;
     const long model_segment_size =
       learnable_params_size_aggregated_[learnable_params_.size()];
     SUCCESS_OR_DIE(gaspi_segment_create(segment_id_data_,
@@ -301,7 +302,7 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
                                         GASPI_GROUP_ALL,
                                         GASPI_BLOCK,
                                         GASPI_MEM_UNINITIALIZED));
-    const long loss_segment_size = num_ranks_;
+    const long loss_segment_size = 2 * num_ranks_;
     SUCCESS_OR_DIE(gaspi_segment_create(segment_id_loss_,
                                         loss_segment_size * sizeof(Dtype),
                                         GASPI_GROUP_ALL,
@@ -1117,10 +1118,11 @@ void Net<Dtype>::CommunicateLossSend(Dtype loss) {
   SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_loss_, &p));
   Dtype* const buffer((Dtype*)p);
 
-  buffer[rank_] = loss;
+  const long slot = 2 * rank_ + loss_buffer_index_;
+  buffer[slot] = loss;
   SUCCESS_OR_DIE(gaspi_notify(segment_id_loss_,
                               rank_,
-                              notification_id_loss_ + rank_,
+                              notification_id_loss_ + slot,
                               1,
                               queue_loss_,
                               GASPI_BLOCK));
@@ -1128,13 +1130,13 @@ void Net<Dtype>::CommunicateLossSend(Dtype loss) {
   for (long remote_rank = 0; remote_rank < num_ranks_; remote_rank++) {
     if (remote_rank == rank_) continue;
     SUCCESS_OR_DIE(gaspi_write_notify(segment_id_loss_,
-                                      rank_ * sizeof(Dtype),
+                                      slot * sizeof(Dtype),
                                       remote_rank,
                                       segment_id_loss_,
-                                      rank_ * sizeof(Dtype),
+                                      slot * sizeof(Dtype),
                                       sizeof(Dtype),
-                                      notification_id_loss_ + rank_,
-                                      1,//zero is not allowed as notification
+                                      notification_id_loss_ + slot,
+                                      1,
                                       queue_loss_,
                                       GASPI_BLOCK));
   }
@@ -1150,22 +1152,24 @@ void Net<Dtype>::CommunicateLossCollect(Dtype& loss) {
 
   loss = 0;
   for (long remote_rank = 0; remote_rank < num_ranks_; remote_rank++) {
+    const long slot = 2 * remote_rank + loss_buffer_index_;
     while (1) {
       gaspi_notification_id_t id;
       gaspi_notification_t v;
       SUCCESS_OR_DIE(gaspi_notify_waitsome(segment_id_loss_,
-                                           notification_id_loss_ + remote_rank,
+                                           notification_id_loss_ + slot,
                                            1,
                                            &id,
                                            GASPI_BLOCK));
       SUCCESS_OR_DIE(gaspi_notify_reset(segment_id_loss_,
-                                        notification_id_loss_ + remote_rank,
+                                        notification_id_loss_ + slot,
                                         &v));
       if (v > 0) break;
     }
-    loss += buffer[remote_rank];
+    loss += buffer[slot];
   }
 
+  loss_buffer_index_ ^= gaspi_notification_id_t(1);
   SUCCESS_OR_DIE(gaspi_wait(queue_loss_, GASPI_BLOCK));
 }
 

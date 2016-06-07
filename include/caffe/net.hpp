@@ -336,6 +336,7 @@ class Net {
   vector<RingBufferRead<Dtype> > com_buffers_read_;
   vector<RingBufferWrite<Dtype> > com_buffers_write_;
   vector<int> com_buffers_status_;
+  gaspi_notification_id_t loss_buffer_index_;
   static const gaspi_rank_t gpi_master_rank_ = 0;
   static const gaspi_queue_id_t queue_diff_ = 0;
   static const gaspi_queue_id_t queue_data_ = 1;

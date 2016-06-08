@@ -976,30 +976,79 @@ template <typename Dtype>
 void Net<Dtype>::BuildLayerDiffCommunication() {
   const long diff_buffer_size = //can store full model
     learnable_params_size_aggregated_[learnable_params_.size()] + 1;
-  const long diff_segment_size = diff_buffer_size * (gpi_master_ ? num_ranks_ : 1);
+  std::vector<gaspi_rank_t> ranks_read = GetTreeReadRanks(rank_);
+  std::vector<gaspi_rank_t> ranks_write = GetTreeWriteRanks(rank_);
+
+  const long diff_segment_size
+    = diff_buffer_size * (ranks_read.size() + ranks_write.size());
   SUCCESS_OR_DIE(gaspi_segment_create(segment_id_diff_,
                                       diff_segment_size * sizeof(Dtype),
                                       GASPI_GROUP_ALL,
                                       GASPI_BLOCK,
                                       GASPI_MEM_UNINITIALIZED));
 
-  if (gpi_master_) {
-    for (long remote_rank = 0; remote_rank < num_ranks_; remote_rank++) {
-      if (remote_rank == gpi_master_rank_) continue;
-      com_buffers_read_.push_back(RingBufferRead<Dtype>(
-        diff_buffer_size, segment_id_diff_, notification_id_diff_ + remote_rank,
-        remote_rank * diff_buffer_size * sizeof(Dtype),
-        remote_rank, segment_id_diff_, notification_id_diff_, 0,
-        queue_diff_));
-      com_buffers_read_status_.push_back(0);
+  long buffer_index = 0;
+
+  for (int i = 0; i < ranks_write.size(); i++) {
+    const int rank_remote = ranks_write[i];
+
+    std::vector<gaspi_rank_t> ranks_read_remote = GetTreeReadRanks(rank_remote);
+    std::vector<gaspi_rank_t> ranks_write_remote = GetTreeWriteRanks(rank_remote);
+    long buffer_index_remote = ranks_write_remote.size();
+    for (int j = 0; (j < ranks_read_remote.size()) && (ranks_read_remote[j] > rank_); j++) {
+      buffer_index_remote++;
     }
-  } else {
+    
     com_buffers_write_.push_back(RingBufferWrite<Dtype>(
-      diff_buffer_size, segment_id_diff_, notification_id_diff_, 0,
-      gpi_master_rank_, segment_id_diff_, notification_id_diff_ + rank_, rank_ *  diff_buffer_size * sizeof(Dtype),
-      queue_diff_));
+      diff_buffer_size, segment_id_diff_, notification_id_diff_ + buffer_index,
+      buffer_index * diff_buffer_size * sizeof(Dtype),
+      rank_remote, segment_id_diff_, notification_id_diff_ + buffer_index_remote,
+      buffer_index_remote * diff_buffer_size * sizeof(Dtype), queue_diff_));
     com_buffers_write_status_.push_back(0);
+    buffer_index++;
   }
+
+  for (int i = 0; i < ranks_read.size(); i++) {
+    com_buffers_read_.push_back(RingBufferRead<Dtype>(
+      diff_buffer_size, segment_id_diff_, notification_id_diff_ + buffer_index,
+      buffer_index * diff_buffer_size * sizeof(Dtype),
+      ranks_read[i], segment_id_diff_, notification_id_diff_ + 0, 0,
+      queue_diff_));
+    com_buffers_read_status_.push_back(0);
+    buffer_index ++;
+  }
+}
+
+template <typename Dtype>
+std::vector<gaspi_rank_t> Net<Dtype>::GetTreeWriteRanks(gaspi_rank_t rank) {
+  // setting highest set bit of rank to zero
+
+  static const long bit_max = 30;
+  std::vector<gaspi_rank_t> vr;
+  for (long i = bit_max; i >= 0; i--) {
+    const long shift = 1l<<i;
+    const long remote = long(rank) - shift;
+    if (remote >= 0l) {
+      vr.push_back(remote);
+      break;
+    }
+  }
+
+  return vr;
+}
+
+template <typename Dtype>
+std::vector<gaspi_rank_t>  Net<Dtype>::GetTreeReadRanks(gaspi_rank_t rank) {
+  static const long bit_max = 30;
+  std::vector<gaspi_rank_t> r;
+
+  for (long level = bit_max;
+      (level >= 0) && ((1l<<level) > long(rank)); level--) {
+    const long shift = 1l<<level;
+    const long remote_rank = long(rank) + shift;
+    if (remote_rank < long(num_ranks_)) r.push_back(remote_rank);
+  }
+  return r;
 }
 
 template <typename Dtype>

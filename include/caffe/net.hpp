@@ -259,6 +259,8 @@ class Net {
 
   // Communicate layers
   void BuildLayerDiffCommunication();
+  std::vector<gaspi_rank_t> GetTreeWriteRanks(gaspi_rank_t rank);
+  std::vector<gaspi_rank_t> GetTreeReadRanks(gaspi_rank_t rank);
   void CommunicateLayerDiff(int layer_id);
   void CommunicateLayerDiffBlocking(int layer_id);
   bool CommunicateLayerDiffFinished(int layer_id);

@@ -259,8 +259,9 @@ class Net {
 
   // Communicate layers
   void BuildLayerDiffCommunication();
-  std::vector<gaspi_rank_t> GetTreeWriteRanks(gaspi_rank_t rank);
-  std::vector<gaspi_rank_t> GetTreeReadRanks(gaspi_rank_t rank);
+  std::vector<gaspi_rank_t> GetDiffTreeWriteRanks(gaspi_rank_t rank);
+  std::vector<gaspi_rank_t> GetDiffTreeReadRanks(gaspi_rank_t rank);
+  std::vector<gaspi_rank_t> GetDataTreeWriteRanks(gaspi_rank_t rank);
   void CommunicateLayerDiff(int layer_id);
   void CommunicateLayerDiffBlocking(int layer_id);
   bool CommunicateLayerDiffFinished(int layer_id);
@@ -342,8 +343,9 @@ class Net {
   vector<RingBufferWrite<Dtype> > com_buffers_write_;
   vector<int> com_buffers_read_status_;
   vector<int> com_buffers_write_status_;
+  vector<gaspi_rank_t> send_data_ranks_;
   gaspi_notification_id_t loss_buffer_index_;
-  static const gaspi_rank_t gpi_master_rank_ = 0;
+  static const gaspi_rank_t gpi_master_rank_ = 0;// don't change
   static const gaspi_queue_id_t queue_diff_ = 0;
   static const gaspi_queue_id_t queue_data_ = 1;
   static const gaspi_queue_id_t queue_loss_ = 2;

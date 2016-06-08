@@ -288,7 +288,7 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
     }
     loss_buffer_index_ = 0;
     const long model_segment_size =
-      learnable_params_size_aggregated_[learnable_params_.size()];
+      learnable_params_size_aggregated_.back();
     SUCCESS_OR_DIE(gaspi_segment_create(segment_id_data_,
                                         model_segment_size * sizeof(Dtype),
                                         GASPI_GROUP_ALL,
@@ -300,6 +300,7 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
                                         GASPI_GROUP_ALL,
                                         GASPI_BLOCK,
                                         GASPI_MEM_UNINITIALIZED));
+    send_data_ranks_ = GetDataTreeWriteRanks(rank_);
     BuildLayerDiffCommunication();
     CommunicateData();
   }
@@ -975,9 +976,9 @@ void Net<Dtype>::ToHDF5(const string& filename, bool write_diff) const {
 template <typename Dtype>
 void Net<Dtype>::BuildLayerDiffCommunication() {
   const long diff_buffer_size = //can store full model
-    learnable_params_size_aggregated_[learnable_params_.size()] + 1;
-  std::vector<gaspi_rank_t> ranks_read = GetTreeReadRanks(rank_);
-  std::vector<gaspi_rank_t> ranks_write = GetTreeWriteRanks(rank_);
+    learnable_params_size_aggregated_.back() + 1;
+  std::vector<gaspi_rank_t> ranks_read = GetDiffTreeReadRanks(rank_);
+  std::vector<gaspi_rank_t> ranks_write = GetDiffTreeWriteRanks(rank_);
 
   const long diff_segment_size
     = diff_buffer_size * (ranks_read.size() + ranks_write.size());
@@ -992,8 +993,8 @@ void Net<Dtype>::BuildLayerDiffCommunication() {
   for (int i = 0; i < ranks_write.size(); i++) {
     const int rank_remote = ranks_write[i];
 
-    std::vector<gaspi_rank_t> ranks_read_remote = GetTreeReadRanks(rank_remote);
-    std::vector<gaspi_rank_t> ranks_write_remote = GetTreeWriteRanks(rank_remote);
+    std::vector<gaspi_rank_t> ranks_read_remote = GetDiffTreeReadRanks(rank_remote);
+    std::vector<gaspi_rank_t> ranks_write_remote = GetDiffTreeWriteRanks(rank_remote);
     long buffer_index_remote = ranks_write_remote.size();
     for (int j = 0; (j < ranks_read_remote.size()) && (ranks_read_remote[j] > rank_); j++) {
       buffer_index_remote++;
@@ -1020,7 +1021,7 @@ void Net<Dtype>::BuildLayerDiffCommunication() {
 }
 
 template <typename Dtype>
-std::vector<gaspi_rank_t> Net<Dtype>::GetTreeWriteRanks(gaspi_rank_t rank) {
+std::vector<gaspi_rank_t> Net<Dtype>::GetDiffTreeWriteRanks(gaspi_rank_t rank) {
   // setting highest set bit of rank to zero
 
   static const long bit_max = 30;
@@ -1033,12 +1034,11 @@ std::vector<gaspi_rank_t> Net<Dtype>::GetTreeWriteRanks(gaspi_rank_t rank) {
       break;
     }
   }
-
   return vr;
 }
 
 template <typename Dtype>
-std::vector<gaspi_rank_t>  Net<Dtype>::GetTreeReadRanks(gaspi_rank_t rank) {
+std::vector<gaspi_rank_t>  Net<Dtype>::GetDiffTreeReadRanks(gaspi_rank_t rank) {
   static const long bit_max = 30;
   std::vector<gaspi_rank_t> r;
 
@@ -1046,6 +1046,18 @@ std::vector<gaspi_rank_t>  Net<Dtype>::GetTreeReadRanks(gaspi_rank_t rank) {
       (level >= 0) && ((1l<<level) > long(rank)); level--) {
     const long shift = 1l<<level;
     const long remote_rank = long(rank) + shift;
+    if (remote_rank < long(num_ranks_)) r.push_back(remote_rank);
+  }
+  return r;
+}
+
+template <typename Dtype>
+std::vector<gaspi_rank_t> Net<Dtype>::GetDataTreeWriteRanks(gaspi_rank_t rank) {
+  static const long branching = 3;
+
+  std::vector<gaspi_rank_t> r;
+  for (long i = 1; i <= branching; i++) {
+    const long remote_rank = branching * long(rank) + i;
     if (remote_rank < long(num_ranks_)) r.push_back(remote_rank);
   }
   return r;
@@ -1126,6 +1138,7 @@ void Net<Dtype>::CommunicateData(void) {
   gaspi_pointer_t p;
   SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_data_, &p));
   Dtype* const buffer((Dtype*)p);
+  const long model_length = learnable_params_size_aggregated_.back();
 
   if (gpi_master_) {
     long index = 0;
@@ -1133,21 +1146,6 @@ void Net<Dtype>::CommunicateData(void) {
       memcpy(&buffer[index], learnable_params_[layer]->cpu_data(),
              learnable_params_[layer]->count() * sizeof(Dtype));
       index += learnable_params_[layer]->count();
-    }
-
-    gaspi_wait(queue_data_, GASPI_TEST);//todo wait only if queue full
-    for (int rank = 0; rank < num_ranks_; rank++) {
-      if (rank == gpi_master_rank_) continue;
-      SUCCESS_OR_DIE(gaspi_write_notify(segment_id_data_,
-                                        0,
-                                        rank,
-                                        segment_id_data_,
-                                        0,
-                                        index * sizeof(Dtype),
-                                        notification_id_data_,
-                                        1,
-                                        queue_data_,
-                                        GASPI_BLOCK));
     }
   } else {
     while (1) {
@@ -1163,6 +1161,24 @@ void Net<Dtype>::CommunicateData(void) {
                                         &v));
       if (v > 0) break;
     }
+  }
+
+  gaspi_wait(queue_data_, GASPI_BLOCK);//todo wait only if queue full
+
+  for (int i = 0; i < send_data_ranks_.size(); i++) {
+    SUCCESS_OR_DIE(gaspi_write_notify(segment_id_data_,
+                                      0,
+                                      send_data_ranks_[i],
+                                      segment_id_data_,
+                                      0,
+                                      model_length * sizeof(Dtype),
+                                      notification_id_data_,
+                                      1,
+                                      queue_data_,
+                                      GASPI_BLOCK));
+  }
+
+  if (!gpi_master_) {
     long index = 0;
     for (int layer = 0; layer < learnable_params_.size(); layer++) {
       Blob<Dtype>& blob = *learnable_params_[layer];

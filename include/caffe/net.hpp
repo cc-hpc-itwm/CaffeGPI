@@ -262,6 +262,7 @@ class Net {
   std::vector<gaspi_rank_t> GetDiffTreeWriteRanks(gaspi_rank_t rank);
   std::vector<gaspi_rank_t> GetDiffTreeReadRanks(gaspi_rank_t rank);
   std::vector<gaspi_rank_t> GetDataTreeWriteRanks(gaspi_rank_t rank);
+  int GetDataTreeWriteBranchingFactor(void);
   void CommunicateLayerDiff(int layer_id);
   void CommunicateLayerDiffBlocking(int layer_id);
   bool CommunicateLayerDiffFinished(int layer_id);

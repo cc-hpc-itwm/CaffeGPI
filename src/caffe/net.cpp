@@ -644,10 +644,11 @@ void Net<Dtype>::BackwardFromTo(int start, int end) {
       layers_[i]->Backward(
           top_vecs_[i], bottom_need_backward_[i], bottom_vecs_[i]);
       if (debug_info_) { BackwardDebugInfo(i); }
-      CommunicateLayerDiff(--finished_learnable_parameter);
+      AppendLayerToCalculatedBlobs(i);
+      CommunicateLayerDiff();
     }
   }
-  CommunicateLayerDiffBlocking(finished_learnable_parameter);
+  CommunicateLayerDiffBlocking();
   ScaleLayerDiff(1./Dtype(num_ranks_));
 }
 
@@ -1089,62 +1090,72 @@ int Net<Dtype>::GetDataTreeWriteBranchingFactor(void) {
 }
 
 template <typename Dtype>
-void Net<Dtype>::CommunicateLayerDiff(int layer_id) {
+void Net<Dtype>::ResetComBuffersStatus(void) {
+  for (int i = 0; i < com_buffers_read_status_.size(); i++)
+    com_buffers_read_status_[i] = 0;
+  for (int i = 0; i < com_buffers_write_status_.size(); i++)
+    com_buffers_write_status_[i] = 0;
+  calculated_blobs_.resize(0);
+}
+
+template <typename Dtype>
+void Net<Dtype>::AppendLayerToCalculatedBlobs(int index) {
+  vector<shared_ptr<Blob<Dtype> > >& blobs = layers_[index].get()->blobs();
+  for (int i = 0; i < blobs.size(); i++) {
+    calculated_blobs_.push_back(blobs[i].get());
+  }
+}
+
+template <typename Dtype>
+void Net<Dtype>::CommunicateLayerDiff() {
   if (!gpi_communication_) return;
 
   for (long i = 0; i < com_buffers_read_.size(); i++) {
     RingBufferRead<Dtype>& buffer = com_buffers_read_[i];
-    while(buffer.GetNumData()) {
-      int update_layer = com_buffers_read_status_[i] - 1;
-      if (update_layer < layer_id) break;
-      if (buffer.Add(learnable_params_[update_layer]->mutable_cpu_diff(),
-                     learnable_params_[update_layer]->count())) {
-//          gaspi_printf("Add failed\n");
+    while (com_buffers_read_status_[i] < calculated_blobs_.size()) {
+      Blob<Dtype>& blob = *calculated_blobs_[com_buffers_read_status_[i]];
+      if (buffer.Add(blob.mutable_cpu_diff(), blob.count())) {
         break;
       } else {
-//          gaspi_printf("Add succeded\n");
-        com_buffers_read_status_[i]--;
+        com_buffers_read_status_[i]++;
       }
     }
   }
-  if (com_buffers_write_.size()) {
-    int first_update_layer = com_buffers_write_status_[0] - 1;
-    for (int update_layer = first_update_layer; update_layer >= layer_id;
-         --update_layer) {
-      if (!CommunicateLayerDiffReadFinished(update_layer)) break;
-      if (com_buffers_write_[0].Write(learnable_params_[update_layer]->cpu_diff(),
-                                      learnable_params_[update_layer]->count())) {
-//        gaspi_printf("Write failed\n");
+  for (long i = 0; i < com_buffers_write_.size(); i++) {
+    RingBufferWrite<Dtype>& buffer = com_buffers_write_[i];
+    while ((com_buffers_write_status_[i] < calculated_blobs_.size())
+           && CommunicateLayerDiffReadFinished(com_buffers_write_status_[i])) {
+      Blob<Dtype>& blob = *calculated_blobs_[com_buffers_write_status_[i]];
+      if (buffer.Write(blob.cpu_diff(), blob.count())) {
         break;
       } else {
-//        gaspi_printf("Write succeded\n");
-        com_buffers_write_status_[0]--;
+        com_buffers_write_status_[i]++;
       }
     }
   }
 }
 
 template <typename Dtype>
-void Net<Dtype>::CommunicateLayerDiffBlocking(int layer_id) {
-  while(!CommunicateLayerDiffFinished(layer_id)) {
-    CommunicateLayerDiff(layer_id);
+void Net<Dtype>::CommunicateLayerDiffBlocking() {
+  while(!CommunicateLayerDiffFinished()) {
+    CommunicateLayerDiff();
   }
 }
 
 template <typename Dtype>
-bool Net<Dtype>::CommunicateLayerDiffFinished(int layer_id) {
-  int running = !CommunicateLayerDiffReadFinished(layer_id);
+bool Net<Dtype>::CommunicateLayerDiffFinished() {
+  int running = !CommunicateLayerDiffReadFinished(calculated_blobs_.size() - 1);
   for (long i = 0; i < com_buffers_write_status_.size(); i++) {
-    running |= (com_buffers_write_status_[i] > layer_id);
+    running |= (com_buffers_write_status_[i] < calculated_blobs_.size());
   }
   return !running;
 }
 
 template <typename Dtype>
-bool Net<Dtype>::CommunicateLayerDiffReadFinished(int layer_id) {
+bool Net<Dtype>::CommunicateLayerDiffReadFinished(int index) {
   int running = 0;
   for (long i = 0; i < com_buffers_read_status_.size(); i++) {
-    running |= (com_buffers_read_status_[i] > layer_id);
+    running |= (com_buffers_read_status_[i] <= index);
   }
   return !running;
 }
@@ -1285,14 +1296,6 @@ gaspi_datatype_t Net<float>::GetGPI2DataType(void) {
 template <>
 gaspi_datatype_t Net<double>::GetGPI2DataType(void) {
   return GASPI_TYPE_DOUBLE;
-}
-
-template <typename Dtype>
-void Net<Dtype>::ResetComBuffersStatus(void) {
-  for (int i = 0; i < com_buffers_read_status_.size(); i++)
-    com_buffers_read_status_[i] = learnable_params_.size();
-  for (int i = 0; i < com_buffers_write_status_.size(); i++)
-    com_buffers_write_status_[i] = learnable_params_.size();
 }
 
 template <typename Dtype>

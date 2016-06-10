@@ -263,15 +263,16 @@ class Net {
   std::vector<gaspi_rank_t> GetDiffTreeReadRanks(gaspi_rank_t rank);
   std::vector<gaspi_rank_t> GetDataTreeWriteRanks(gaspi_rank_t rank);
   int GetDataTreeWriteBranchingFactor(void);
-  void CommunicateLayerDiff(int layer_id);
-  void CommunicateLayerDiffBlocking(int layer_id);
-  bool CommunicateLayerDiffFinished(int layer_id);
-  bool CommunicateLayerDiffReadFinished(int layer_id);
+  void ResetComBuffersStatus(void);
+  void AppendLayerToCalculatedBlobs(int index);
+  void CommunicateLayerDiff(void);
+  void CommunicateLayerDiffBlocking(void);
+  bool CommunicateLayerDiffFinished(void);
+  bool CommunicateLayerDiffReadFinished(int index);
   void ScaleLayerDiff(Dtype s);
   void CommunicateLossSend(Dtype loss);
   void CommunicateLossCollect(Dtype& loss);
   gaspi_datatype_t GetGPI2DataType(void);
-  void ResetComBuffersStatus(void);
 
   /// @brief The network name
   string name_;
@@ -344,6 +345,7 @@ class Net {
   vector<RingBufferWrite<Dtype> > com_buffers_write_;
   vector<int> com_buffers_read_status_;
   vector<int> com_buffers_write_status_;
+  vector<Blob<Dtype>* > calculated_blobs_;
   vector<gaspi_rank_t> send_data_ranks_;
   gaspi_notification_id_t loss_buffer_index_;
   static const gaspi_rank_t gpi_master_rank_ = 0;// don't change

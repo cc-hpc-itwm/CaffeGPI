@@ -1162,8 +1162,8 @@ bool Net<Dtype>::CommunicateLayerDiffReadFinished(int index) {
 
 template <typename Dtype>
 void Net<Dtype>::ScaleLayerDiff(Dtype s) {
-  for (long i = 0; i < learnable_params_.size(); i++) {
-    learnable_params_[i]->scale_diff(s);
+  for (long i = 0; i < calculated_blobs_.size(); i++) {
+    calculated_blobs_[i]->scale_diff(s);
   }
 }
 

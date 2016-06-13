@@ -324,6 +324,18 @@ void Solver<Dtype>::Solve(const char* resume_file) {
 }
 
 template <typename Dtype>
+void Solver<Dtype>::ApplyUpdateLayer(int param_id) {
+  LOG(ERROR) << "ApplyUpdateLayer is not implemented for this solver!"
+             << std::endl;
+  exit(-1);
+}
+
+template <typename Dtype>
+bool Solver<Dtype>::SupportApplyUpdateLayer() {
+  return false;
+}
+
+template <typename Dtype>
 void Solver<Dtype>::TestAll() {
   for (int test_net_id = 0;
        test_net_id < test_nets_.size() && !requested_early_exit_;

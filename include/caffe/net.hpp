@@ -100,6 +100,10 @@ class Net {
 
   /// @brief Updates the network weights based on the diff values computed.
   void Update();
+
+  /// @brief Updates the network weights for a single layer.
+  void UpdateLayer(int param_id);
+
   /**
    * @brief Shares weight data of owner blobs with shared blobs.
    *

@@ -1171,6 +1171,14 @@ template <typename Dtype>
 void Net<Dtype>::CommunicateData(void) {
   if (!gpi_communication_) return;
 
+//  const int param_id = std::find(learnable_params().begin(),
+//                                 learnable_params().end(), NULL)
+//                       - learnable_params().begin();
+//  if (!(param_id < learnable_params().size())) {
+//    LOG(ERROR) << "unknown layer in sgd solver!" << std::endl;
+//    exit(-1);
+//  }
+
   gaspi_pointer_t p;
   SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_data_, &p));
   Dtype* const buffer((Dtype*)p);
@@ -1301,8 +1309,13 @@ gaspi_datatype_t Net<double>::GetGPI2DataType(void) {
 template <typename Dtype>
 void Net<Dtype>::Update() {
   for (int i = 0; i < learnable_params_.size(); ++i) {
-    learnable_params_[i]->Update();
+    UpdateLayer(i);
   }
+}
+
+template <typename Dtype>
+void Net<Dtype>::UpdateLayer(int param_id) {
+  learnable_params_[param_id]->Update();
 }
 
 template <typename Dtype>

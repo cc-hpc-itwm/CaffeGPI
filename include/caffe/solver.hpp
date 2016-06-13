@@ -97,6 +97,8 @@ class Solver {
  protected:
   // Make and apply the update value for the current iteration.
   virtual void ApplyUpdate() = 0;
+  void ApplyUpdateLayer(int param_id);
+  bool SupportApplyUpdateLayer();
   string SnapshotFilename(const string extension);
   string SnapshotToBinaryProto();
   string SnapshotToHDF5();

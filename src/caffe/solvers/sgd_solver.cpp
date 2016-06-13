@@ -116,6 +116,30 @@ void SGDSolver<Dtype>::ApplyUpdate() {
 }
 
 template <typename Dtype>
+void SGDSolver<Dtype>::ApplyUpdateLayer(int param_id) {
+  CHECK(Caffe::root_solver());
+  Dtype rate = GetLearningRate();
+  if (this->param_.display() && this->iter_ % this->param_.display() == 0) {
+    LOG(INFO) << "Iteration " << this->iter_ << ", lr = " << rate;
+  }
+  if (!SupportApplyUpdateLayer()) {
+    LOG(ERROR) << "clip gradients not supported with iterative updates"
+               << " in sgd solver!" << std::endl;
+    exit(-1);
+  }
+  Normalize(param_id);
+  Regularize(param_id);
+  ComputeUpdateValue(param_id, rate);
+
+  this->net_->UpdateLayer(param_id);
+}
+
+template <typename Dtype>
+bool SGDSolver<Dtype>::SupportApplyUpdateLayer() {
+  return ((this->param_.clip_gradients() < 0) ? true : false);
+}
+
+template <typename Dtype>
 void SGDSolver<Dtype>::Normalize(int param_id) {
   if (this->param_.iter_size() == 1) { return; }
   // Scale gradient to counterbalance accumulation.

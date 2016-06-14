@@ -129,7 +129,7 @@ class Net {
   }
 
   // Communicate layers
-  void CommunicateData(void);
+  void CommunicateDataBlocking(void);
   bool AmIGPIMaster(void) {return gpi_master_;}
 
   /// @brief Updates the network weights based on the diff values computed.

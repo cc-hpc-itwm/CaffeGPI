@@ -303,7 +303,7 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
                                         GASPI_MEM_UNINITIALIZED));
     send_data_ranks_ = GetDataTreeWriteRanks(rank_);
     BuildLayerDiffCommunication();
-    CommunicateData();
+    CommunicateDataBlocking();
   }
 }
 
@@ -681,7 +681,7 @@ void Net<Dtype>::BackwardFromToAndAggregateDiffsAndUpdate(
   ScaleLayerDiff(1./Dtype(num_ranks_));
 
   if (gpi_master_) solver->ApplyUpdate();
-  CommunicateData();
+  CommunicateDataBlocking();
 }
 
 template <typename Dtype>
@@ -1217,7 +1217,7 @@ void Net<Dtype>::ScaleLayerDiff(Dtype s) {
 }
 
 template <typename Dtype>
-void Net<Dtype>::CommunicateData(void) {
+void Net<Dtype>::CommunicateDataBlocking(void) {
   if (!gpi_communication_) return;
 
 //  const int param_id = std::find(learnable_params().begin(),

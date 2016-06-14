@@ -262,7 +262,7 @@ void Solver<Dtype>::Step(int iters) {
         callbacks_[i]->on_gradients_ready();
       }
       if (net_->AmIGPIMaster()) ApplyUpdate();
-      net_->CommunicateData();
+      net_->CommunicateDataBlocking();
     }
 
     // Increment the internal iter_ counter -- its value should always indicate

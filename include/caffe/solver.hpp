@@ -94,11 +94,12 @@ class Solver {
    */
   virtual inline const char* type() const { return ""; }
 
- protected:
   // Make and apply the update value for the current iteration.
   virtual void ApplyUpdate() = 0;
-  void ApplyUpdateLayer(int param_id);
-  bool SupportApplyUpdateLayer();
+  virtual void ApplyUpdateLayer(int param_id);
+
+ protected:
+  virtual bool SupportApplyUpdateLayer();
   string SnapshotFilename(const string extension);
   string SnapshotToBinaryProto();
   string SnapshotToHDF5();

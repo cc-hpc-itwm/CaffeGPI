@@ -8,6 +8,7 @@
 
 #include "hdf5.h"
 
+#include "caffe/solver.hpp"
 #include "caffe/common.hpp"
 #include "caffe/layer.hpp"
 #include "caffe/net.hpp"
@@ -633,12 +634,7 @@ void Net<Dtype>::BackwardFromTo(int start, int end) {
   CHECK_GE(end, 0);
   CHECK_LT(start, layers_.size());
 
-  // todo
-  //assuming we are going through all learnable_params_ here
-  //this is not correct in general
-
   ResetComBuffersStatus();
-  int finished_learnable_parameter = learnable_params_.size();
   for (int i = start; i >= end; --i) {
     if (layer_need_backward_[i]) {
       layers_[i]->Backward(
@@ -650,6 +646,29 @@ void Net<Dtype>::BackwardFromTo(int start, int end) {
   }
   CommunicateLayerDiffBlocking();
   ScaleLayerDiff(1./Dtype(num_ranks_));
+}
+
+template <typename Dtype>
+void Net<Dtype>::BackwardFromToAndUpdate(int start, int end,
+                                         Solver<Dtype>* solver) {
+  CHECK_GE(end, 0);
+  CHECK_LT(start, layers_.size());
+
+  ResetComBuffersStatus();
+  for (int i = start; i >= end; --i) {
+    if (layer_need_backward_[i]) {
+      layers_[i]->Backward(
+          top_vecs_[i], bottom_need_backward_[i], bottom_vecs_[i]);
+      if (debug_info_) { BackwardDebugInfo(i); }
+      AppendLayerToCalculatedBlobs(i);
+      CommunicateLayerDiff();
+    }
+  }
+  CommunicateLayerDiffBlocking();
+  ScaleLayerDiff(1./Dtype(num_ranks_));
+
+  if (gpi_master_) solver->ApplyUpdate();
+  CommunicateData();
 }
 
 template <typename Dtype>
@@ -776,6 +795,17 @@ void Net<Dtype>::BackwardTo(int end) {
 template <typename Dtype>
 void Net<Dtype>::Backward() {
   BackwardFromTo(layers_.size() - 1, 0);
+  BackwardDebugInfo();
+}
+
+template <typename Dtype>
+void Net<Dtype>::BackwardAndUpdate(Solver<Dtype>* solver) {
+  BackwardFromToAndUpdate(layers_.size() - 1, 0, solver);
+  BackwardDebugInfo();
+}
+
+template <typename Dtype>
+void Net<Dtype>::BackwardDebugInfo() {
   if (debug_info_) {
     Dtype asum_data = 0, asum_diff = 0, sumsq_data = 0, sumsq_diff = 0;
     for (int i = 0; i < learnable_params_.size(); ++i) {

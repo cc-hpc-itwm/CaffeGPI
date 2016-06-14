@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <GASPI_Ext.h>
 
 #include "caffe/solver.hpp"
 #include "caffe/util/format.hpp"
@@ -218,8 +219,15 @@ void Solver<Dtype>::Step(int iters) {
     net_->set_debug_info(display && param_.debug_info());
     // accumulate the loss and gradient
     Dtype loss = 0;
-    for (int i = 0; i < param_.iter_size(); ++i) {
-      loss += net_->ForwardBackward();
+    if (SupportApplyUpdateLayer()) {
+      for (int i = 0; i < param_.iter_size() - 1; ++i) {
+        loss += net_->ForwardBackward();
+      }
+      loss += net_->ForwardBackwardAndUpdate(this);
+    } else {
+      for (int i = 0; i < param_.iter_size(); ++i) {
+        loss += net_->ForwardBackward();
+      }
     }
     loss /= param_.iter_size();
     // average the loss across iterations for smoothed reporting
@@ -247,11 +255,14 @@ void Solver<Dtype>::Step(int iters) {
         }
       }
     }
-    for (int i = 0; i < callbacks_.size(); ++i) {
-      callbacks_[i]->on_gradients_ready();
+
+    if (!SupportApplyUpdateLayer()) {
+      for (int i = 0; i < callbacks_.size(); ++i) {
+        callbacks_[i]->on_gradients_ready();
+      }
+      if (net_->AmIGPIMaster()) ApplyUpdate();
+      net_->CommunicateData();
     }
-    if (net_->AmIGPIMaster()) ApplyUpdate();
-    net_->CommunicateData();
 
     // Increment the internal iter_ counter -- its value should always indicate
     // the number of times the weights have been updated.

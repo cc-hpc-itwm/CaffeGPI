@@ -16,6 +16,9 @@
 
 namespace caffe {
 
+template <typename Dtype>
+class Solver;
+
 /**
  * @brief Connects Layer%s together into a directed acyclic graph (DAG)
  *        specified by a NetParameter.
@@ -73,7 +76,13 @@ class Net {
    * provided during the forward pass.
    */
   void Backward();
+  /**
+   * Do Backward propagation and update of the net in one step.
+   */
+  void BackwardAndUpdate(Solver<Dtype>* solver);
+  void BackwardDebugInfo();
   void BackwardFromTo(int start, int end);
+  void BackwardFromToAndUpdate(int start, int end, Solver<Dtype>* solver);
   void BackwardFrom(int start);
   void BackwardTo(int end);
 
@@ -89,6 +98,15 @@ class Net {
     Dtype loss = ForwardFromToLocal(0, layers_.size() - 1);
     CommunicateLossSend(loss);
     Backward();
+    CommunicateLossCollect(loss);
+
+    return loss;
+  }
+
+  Dtype ForwardBackwardAndUpdate(Solver<Dtype>* solver) {
+    Dtype loss = ForwardFromToLocal(0, layers_.size() - 1);
+    CommunicateLossSend(loss);
+    BackwardAndUpdate(solver);
     CommunicateLossCollect(loss);
 
     return loss;

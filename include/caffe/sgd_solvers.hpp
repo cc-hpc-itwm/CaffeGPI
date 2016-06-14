@@ -23,12 +23,13 @@ class SGDSolver : public Solver<Dtype> {
 
   const vector<shared_ptr<Blob<Dtype> > >& history() { return history_; }
 
+  virtual void ApplyUpdateLayer(int param_id);
+
  protected:
   void PreSolve();
   Dtype GetLearningRate();
   virtual void ApplyUpdate();
-  void ApplyUpdateLayer(int param_id);
-  bool SupportApplyUpdateLayer();
+  virtual bool SupportApplyUpdateLayer();
   virtual void Normalize(int param_id);
   virtual void Regularize(int param_id);
   virtual void ComputeUpdateValue(int param_id, Dtype rate);

@@ -219,15 +219,16 @@ void Solver<Dtype>::Step(int iters) {
     net_->set_debug_info(display && param_.debug_info());
     // accumulate the loss and gradient
     Dtype loss = 0;
+    for (int i = 0; i < param_.iter_size() - 1; ++i) {
+      // if param_.iter_size()>1 we could get race conditions in
+      // CommunicateLossSend and CommunicateLossCollect if ranks
+      // get too far out of sync here
+      loss += net_->ForwardBackward();
+    }
     if (SupportApplyUpdateLayer()) {
-      for (int i = 0; i < param_.iter_size() - 1; ++i) {
-        loss += net_->ForwardBackward();
-      }
-      loss += net_->ForwardBackwardAndUpdate(this);
+      loss += net_->ForwardBackwardAndAggregateDiffsAndUpdate(this);
     } else {
-      for (int i = 0; i < param_.iter_size(); ++i) {
-        loss += net_->ForwardBackward();
-      }
+      loss += net_->ForwardBackwardAndAggregateDiffs();
     }
     loss /= param_.iter_size();
     // average the loss across iterations for smoothed reporting

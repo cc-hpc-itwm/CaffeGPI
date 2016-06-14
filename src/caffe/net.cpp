@@ -633,6 +633,19 @@ template <typename Dtype>
 void Net<Dtype>::BackwardFromTo(int start, int end) {
   CHECK_GE(end, 0);
   CHECK_LT(start, layers_.size());
+  for (int i = start; i >= end; --i) {
+    if (layer_need_backward_[i]) {
+      layers_[i]->Backward(
+          top_vecs_[i], bottom_need_backward_[i], bottom_vecs_[i]);
+      if (debug_info_) { BackwardDebugInfo(i); }
+    }
+  }
+}
+
+template <typename Dtype>
+void Net<Dtype>::BackwardFromToAndAggregateDiffs(int start, int end) {
+  CHECK_GE(end, 0);
+  CHECK_LT(start, layers_.size());
 
   ResetComBuffersStatus();
   for (int i = start; i >= end; --i) {
@@ -649,8 +662,8 @@ void Net<Dtype>::BackwardFromTo(int start, int end) {
 }
 
 template <typename Dtype>
-void Net<Dtype>::BackwardFromToAndUpdate(int start, int end,
-                                         Solver<Dtype>* solver) {
+void Net<Dtype>::BackwardFromToAndAggregateDiffsAndUpdate(
+  int start, int end, Solver<Dtype>* solver) {
   CHECK_GE(end, 0);
   CHECK_LT(start, layers_.size());
 
@@ -799,8 +812,14 @@ void Net<Dtype>::Backward() {
 }
 
 template <typename Dtype>
-void Net<Dtype>::BackwardAndUpdate(Solver<Dtype>* solver) {
-  BackwardFromToAndUpdate(layers_.size() - 1, 0, solver);
+void Net<Dtype>::BackwardAndAggregateDiffs() {
+  BackwardFromToAndAggregateDiffs(layers_.size() - 1, 0);
+  BackwardDebugInfo();
+}
+
+template <typename Dtype>
+void Net<Dtype>::BackwardAndAggregateDiffsAndUpdate(Solver<Dtype>* solver) {
+  BackwardFromToAndAggregateDiffsAndUpdate(layers_.size() - 1, 0, solver);
   BackwardDebugInfo();
 }
 

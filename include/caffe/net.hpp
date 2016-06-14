@@ -77,12 +77,19 @@ class Net {
    */
   void Backward();
   /**
-   * Do Backward propagation and update of the net in one step.
+   * Do Backward propagation and diff aggregation in one step.
    */
-  void BackwardAndUpdate(Solver<Dtype>* solver);
+  void BackwardAndAggregateDiffs();
+  /**
+   * Do Backward propagation and diff aggregation and update of the net
+   *  in one step.
+   */
+  void BackwardAndAggregateDiffsAndUpdate(Solver<Dtype>* solver);
   void BackwardDebugInfo();
   void BackwardFromTo(int start, int end);
-  void BackwardFromToAndUpdate(int start, int end, Solver<Dtype>* solver);
+  void BackwardFromToAndAggregateDiffs(int start, int end);
+  void BackwardFromToAndAggregateDiffsAndUpdate(int start, int end,
+                                                Solver<Dtype>* solver);
   void BackwardFrom(int start);
   void BackwardTo(int end);
 
@@ -103,10 +110,19 @@ class Net {
     return loss;
   }
 
-  Dtype ForwardBackwardAndUpdate(Solver<Dtype>* solver) {
+  Dtype ForwardBackwardAndAggregateDiffs() {
     Dtype loss = ForwardFromToLocal(0, layers_.size() - 1);
     CommunicateLossSend(loss);
-    BackwardAndUpdate(solver);
+    BackwardAndAggregateDiffs();
+    CommunicateLossCollect(loss);
+
+    return loss;
+  }
+
+  Dtype ForwardBackwardAndAggregateDiffsAndUpdate(Solver<Dtype>* solver) {
+    Dtype loss = ForwardFromToLocal(0, layers_.size() - 1);
+    CommunicateLossSend(loss);
+    BackwardAndAggregateDiffsAndUpdate(solver);
     CommunicateLossCollect(loss);
 
     return loss;

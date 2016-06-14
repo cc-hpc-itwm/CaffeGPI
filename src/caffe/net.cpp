@@ -288,20 +288,13 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
       learnable_params_size_aggregated_.push_back(learnable_params_size_aggregated_.back() + s);
     }
     loss_buffer_index_ = 0;
-    const long model_segment_size =
-      learnable_params_size_aggregated_.back();
-    SUCCESS_OR_DIE(gaspi_segment_create(segment_id_data_,
-                                        model_segment_size * sizeof(Dtype),
-                                        GASPI_GROUP_ALL,
-                                        GASPI_BLOCK,
-                                        GASPI_MEM_UNINITIALIZED));
     const long loss_segment_size = 2 * num_ranks_;
     SUCCESS_OR_DIE(gaspi_segment_create(segment_id_loss_,
                                         loss_segment_size * sizeof(Dtype),
                                         GASPI_GROUP_ALL,
                                         GASPI_BLOCK,
                                         GASPI_MEM_UNINITIALIZED));
-    send_data_ranks_ = GetDataTreeWriteRanks(rank_);
+    BuildLayerDataCommunication();
     BuildLayerDiffCommunication();
     CommunicateDataBlocking();
   }
@@ -1099,6 +1092,22 @@ std::vector<gaspi_rank_t>  Net<Dtype>::GetDiffTreeReadRanks(gaspi_rank_t rank) {
     if (remote_rank < long(num_ranks_)) r.push_back(remote_rank);
   }
   return r;
+}
+
+template <typename Dtype>
+void Net<Dtype>::BuildLayerDataCommunication() {
+  const long model_segment_size =
+    learnable_params_size_aggregated_.back();
+  SUCCESS_OR_DIE(gaspi_segment_create(segment_id_data_,
+                                      model_segment_size * sizeof(Dtype),
+                                      GASPI_GROUP_ALL,
+                                      GASPI_BLOCK,
+                                      GASPI_MEM_UNINITIALIZED));
+  com_data_read_status_.push_back(0);
+  send_data_ranks_ = GetDataTreeWriteRanks(rank_);
+  for (int i = 0; i < send_data_ranks_.size(); i++) {
+    com_data_write_status_.push_back(0);
+  }
 }
 
 template <typename Dtype>

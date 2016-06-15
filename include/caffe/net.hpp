@@ -300,8 +300,11 @@ class Net {
   std::vector<gaspi_rank_t> GetDiffTreeWriteRanks(gaspi_rank_t rank);
   std::vector<gaspi_rank_t> GetDiffTreeReadRanks(gaspi_rank_t rank);
   void BuildLayerDataCommunication();
-  std::vector<gaspi_rank_t> GetDataTreeWriteRanks(gaspi_rank_t rank);
-  int GetDataTreeWriteBranchingFactor(void);
+  std::vector<gaspi_rank_t> GetDataTreeWriteRanks(gaspi_rank_t rank,
+                                                  int branching_factor);
+  std::vector<gaspi_rank_t> GetDataTreeReadRanks(gaspi_rank_t rank,
+                                                 int branching_factor);
+  int GetDataTreeBranchingFactor(void);
   void ResetComBuffersStatus(void);
   void AppendLayerToCalculatedBlobs(int index);
   void CommunicateLayerDiff(void);
@@ -384,15 +387,15 @@ class Net {
   gaspi_rank_t num_ranks_;
   bool gpi_master_;
   vector<unsigned long> learnable_params_size_aggregated_;
-  vector<RingBufferRead<Dtype> > com_buffers_read_;
-  vector<RingBufferWrite<Dtype> > com_buffers_write_;
-  vector<int> com_buffers_read_status_;
-  vector<int> com_buffers_write_status_;
+  vector<RingBufferRead<Dtype> > com_buffers_diff_read_;
+  vector<RingBufferWrite<Dtype> > com_buffers_diff_write_;
+  vector<int> com_buffers_diff_read_status_;
+  vector<int> com_buffers_diff_write_status_;
   vector<Blob<Dtype>* > calculated_blobs_;
-  vector<int> com_data_read_status_;
-  vector<int> com_data_write_status_;
-  vector<int> com_data_import_status_;
-  vector<gaspi_rank_t> send_data_ranks_;
+  vector<RingBufferRead<Dtype> > com_buffers_data_read_;
+  vector<RingBufferWrite<Dtype> > com_buffers_data_write_;
+  vector<int> com_buffers_data_read_status_;
+  vector<int> com_buffers_data_write_status_;
   gaspi_notification_id_t loss_buffer_index_;
   static const gaspi_rank_t gpi_master_rank_ = 0;// don't change
   static const gaspi_queue_id_t queue_diff_ = 0;

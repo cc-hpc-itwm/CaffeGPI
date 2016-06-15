@@ -14,7 +14,7 @@ do                                                                      \
                          						\
     if (r != GASPI_SUCCESS)                                             \
     {                                          				\
-        std::cout << std::getenv("HOSTNAME") <<" "<<r<< " '" << "' ASGD FAIL at " << __FILE__<< " "<<__LINE__<<std::endl;   \
+        std::cout << std::getenv("HOSTNAME") <<" "<<r<< " '" << "' CAFFE FAIL at " << __FILE__<< " "<<__LINE__<<std::endl;   \
         fflush (stdout);                                                \
                                                                         \
         exit (EXIT_FAILURE);                                            \
@@ -28,7 +28,7 @@ do                                                                      \
                                    					\
     if (r != GASPI_SUCCESS)                                             \
     {                                                                   \
-        std::cout << std::getenv("HOSTNAME") <<" "<<r<< " ASGD FAIL at " << __FILE__<< " "<<__LINE__ <<std::endl;       \
+        std::cout << std::getenv("HOSTNAME") <<" "<<r<< " CAFFE FAIL at " << __FILE__<< " "<<__LINE__ <<std::endl;       \
     }                                                                   \
 }while (0)
 

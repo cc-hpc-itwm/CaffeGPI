@@ -309,6 +309,10 @@ class Net {
   bool CommunicateLayerDiffFinished(void);
   bool CommunicateLayerDiffReadFinished(int index);
   void ScaleLayerDiff(Dtype s);
+  void CommunicateLayerData(Solver<Dtype>* solver);
+  void CommunicateLayerDiffAndDataBlocking(Solver<Dtype>* solver);
+  bool CommunicateLayerDiffAndDataFinished(void);
+  int FindLearnableParamsID(Blob<Dtype>* blob);
   void CommunicateLossSend(Dtype loss);
   void CommunicateLossCollect(Dtype& loss);
   gaspi_datatype_t GetGPI2DataType(void);
@@ -387,6 +391,7 @@ class Net {
   vector<Blob<Dtype>* > calculated_blobs_;
   vector<int> com_data_read_status_;
   vector<int> com_data_write_status_;
+  vector<int> com_data_import_status_;
   vector<gaspi_rank_t> send_data_ranks_;
   gaspi_notification_id_t loss_buffer_index_;
   static const gaspi_rank_t gpi_master_rank_ = 0;// don't change

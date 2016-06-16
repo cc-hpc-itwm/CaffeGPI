@@ -226,6 +226,7 @@ void Solver<Dtype>::Step(int iters) {
       loss += net_->ForwardBackward();
     }
     if (SupportApplyUpdateLayer()) {
+//      LOG(INFO) << "Using asynchronous update" << std::endl;
       loss += net_->ForwardBackwardAndAggregateDiffsAndUpdate(this);
     } else {
       loss += net_->ForwardBackwardAndAggregateDiffs();
@@ -262,6 +263,7 @@ void Solver<Dtype>::Step(int iters) {
         callbacks_[i]->on_gradients_ready();
       }
       if (net_->AmIGPIMaster()) ApplyUpdate();
+      net_->MarkDataAsUpdatedOnMasterNode();
       net_->CommunicateDataBlocking();
     }
 

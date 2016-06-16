@@ -130,7 +130,8 @@ class Net {
 
   // Communicate layers
   void CommunicateDataBlocking(void);
-  bool AmIGPIMaster(void) {return gpi_master_;}
+  bool AmIGPIMaster(void) {return !com_buffers_data_read_.size();}
+  void MarkDataAsUpdatedOnMasterNode(void);
 
   /// @brief Updates the network weights based on the diff values computed.
   void Update();
@@ -305,16 +306,18 @@ class Net {
   std::vector<gaspi_rank_t> GetDataTreeReadRanks(gaspi_rank_t rank,
                                                  int branching_factor);
   int GetDataTreeBranchingFactor(void);
-  void ResetComBuffersStatus(void);
+  void ResetCommunicationStatus(void);
   void AppendLayerToCalculatedBlobs(int index);
   void CommunicateLayerDiff(void);
   void CommunicateLayerDiffBlocking(void);
   bool CommunicateLayerDiffFinished(void);
   bool CommunicateLayerDiffReadFinished(int index);
   void ScaleLayerDiff(Dtype s);
-  void CommunicateLayerData(Solver<Dtype>* solver);
+  void CommunicateLayerData();
+  bool CommunicateLayerDataFinished(void);
   void CommunicateLayerDiffAndDataBlocking(Solver<Dtype>* solver);
   bool CommunicateLayerDiffAndDataFinished(void);
+  void UpdateLayersWithSolver(Solver<Dtype>* solver);
   int FindLearnableParamsID(Blob<Dtype>* blob);
   void CommunicateLossSend(Dtype loss);
   void CommunicateLossCollect(Dtype& loss);
@@ -385,7 +388,6 @@ class Net {
   bool gpi_communication_;
   gaspi_rank_t rank_;
   gaspi_rank_t num_ranks_;
-  bool gpi_master_;
   vector<unsigned long> learnable_params_size_aggregated_;
   vector<RingBufferRead<Dtype> > com_buffers_diff_read_;
   vector<RingBufferWrite<Dtype> > com_buffers_diff_write_;
@@ -396,8 +398,8 @@ class Net {
   vector<RingBufferWrite<Dtype> > com_buffers_data_write_;
   vector<int> com_buffers_data_read_status_;
   vector<int> com_buffers_data_write_status_;
+  int update_status_;
   gaspi_notification_id_t loss_buffer_index_;
-  static const gaspi_rank_t gpi_master_rank_ = 0;// don't change
   static const gaspi_queue_id_t queue_diff_ = 0;
   static const gaspi_queue_id_t queue_data_ = 1;
   static const gaspi_queue_id_t queue_loss_ = 2;

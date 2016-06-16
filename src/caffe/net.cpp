@@ -281,7 +281,7 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
   if (gpi_communication_) {
     SUCCESS_OR_DIE(gaspi_proc_num(&num_ranks_));
     SUCCESS_OR_DIE(gaspi_proc_rank(&rank_));
-    gpi_master_ = (rank_ == gpi_master_rank_);
+
     learnable_params_size_aggregated_.push_back(0);
     for (long i = 0; i < learnable_params_.size(); ++i) {
       const long s = learnable_params_[i]->count();
@@ -296,7 +296,13 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
                                         GASPI_MEM_UNINITIALIZED));
     BuildLayerDataCommunication();
     BuildLayerDiffCommunication();
+    //broadcast model
+    ResetCommunicationStatus();
+    calculated_blobs_.insert(calculated_blobs_.end(),
+      learnable_params_.begin(), learnable_params_.end());
+    MarkDataAsUpdatedOnMasterNode();
     CommunicateDataBlocking();
+    ResetCommunicationStatus();
   }
 }
 
@@ -640,7 +646,7 @@ void Net<Dtype>::BackwardFromToAndAggregateDiffs(int start, int end) {
   CHECK_GE(end, 0);
   CHECK_LT(start, layers_.size());
 
-  ResetComBuffersStatus();
+  ResetCommunicationStatus();
   for (int i = start; i >= end; --i) {
     if (layer_need_backward_[i]) {
       layers_[i]->Backward(
@@ -660,7 +666,7 @@ void Net<Dtype>::BackwardFromToAndAggregateDiffsAndUpdate(
   CHECK_GE(end, 0);
   CHECK_LT(start, layers_.size());
 
-  ResetComBuffersStatus();
+  ResetCommunicationStatus();
   for (int i = start; i >= end; --i) {
     if (layer_need_backward_[i]) {
       layers_[i]->Backward(
@@ -668,11 +674,12 @@ void Net<Dtype>::BackwardFromToAndAggregateDiffsAndUpdate(
       if (debug_info_) { BackwardDebugInfo(i); }
       AppendLayerToCalculatedBlobs(i);
       CommunicateLayerDiff();
+      UpdateLayersWithSolver(solver);
+      CommunicateLayerData();
     }
   }
 
   CommunicateLayerDiffAndDataBlocking(solver);
-  SUCCESS_OR_DIE(gaspi_barrier(GASPI_GROUP_ALL, GASPI_BLOCK));
 }
 
 template <typename Dtype>
@@ -1201,7 +1208,7 @@ int Net<Dtype>::GetDataTreeBranchingFactor(void) {
 }
 
 template <typename Dtype>
-void Net<Dtype>::ResetComBuffersStatus(void) {
+void Net<Dtype>::ResetCommunicationStatus(void) {
   for (int i = 0; i < com_buffers_diff_read_status_.size(); i++)
     com_buffers_diff_read_status_[i] = 0;
   for (int i = 0; i < com_buffers_diff_write_status_.size(); i++)
@@ -1211,6 +1218,7 @@ void Net<Dtype>::ResetComBuffersStatus(void) {
     com_buffers_data_write_status_[i] = 0;
   for (int i = 0; i < com_buffers_data_read_status_.size(); i++)
     com_buffers_data_read_status_[i] = 0;
+  update_status_ = 0;
 }
 
 template <typename Dtype>
@@ -1287,147 +1295,88 @@ template <typename Dtype>
 void Net<Dtype>::CommunicateDataBlocking(void) {
   if (!gpi_communication_) return;
 
-//  gaspi_pointer_t p;
-//  SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_data_, &p));
-//  Dtype* const buffer((Dtype*)p);
-//  const long model_length = learnable_params_size_aggregated_.back();
-//
-//  if (gpi_master_) {
-//    long index = 0;
-//    for (int layer = 0; layer < learnable_params_.size(); layer++) {
-//      memcpy(&buffer[index], learnable_params_[layer]->cpu_data(),
-//             learnable_params_[layer]->count() * sizeof(Dtype));
-//      index += learnable_params_[layer]->count();
-//    }
-//  } else {
-//    while (1) {
-//      gaspi_notification_id_t id;
-//      gaspi_notification_t v;
-//      SUCCESS_OR_DIE(gaspi_notify_waitsome(segment_id_data_,
-//                                           notification_id_data_,
-//                                           1,
-//                                           &id,
-//                                           GASPI_BLOCK));
-//      SUCCESS_OR_DIE(gaspi_notify_reset(segment_id_data_,
-//                                        notification_id_data_,
-//                                        &v));
-//      if (v > 0) break;
-//    }
-//  }
-//
-//  gaspi_wait(queue_data_, GASPI_BLOCK);//todo wait only if queue full
-//
-//  for (int i = 0; i < send_data_ranks_.size(); i++) {
-//    SUCCESS_OR_DIE(gaspi_write_notify(segment_id_data_,
-//                                      0,
-//                                      send_data_ranks_[i],
-//                                      segment_id_data_,
-//                                      0,
-//                                      model_length * sizeof(Dtype),
-//                                      notification_id_data_,
-//                                      1,
-//                                      queue_data_,
-//                                      GASPI_BLOCK));
-//  }
-//
-//  if (!gpi_master_) {
-//    long index = 0;
-//    for (int layer = 0; layer < learnable_params_.size(); layer++) {
-//      Blob<Dtype>& blob = *learnable_params_[layer];
-//      memcpy(blob.mutable_cpu_data(), &buffer[index],
-//             blob.count() * sizeof(Dtype));
-//      index += blob.count();
-//    }
-//  }
+  while (!CommunicateLayerDataFinished()) {
+    CommunicateLayerData();
+  }
 }
 
 template <typename Dtype>
-void Net<Dtype>::CommunicateLayerData(Solver<Dtype>* solver) {
+bool Net<Dtype>::CommunicateLayerDataFinished(void) {
+  int running = 0;
+  for (long i = 0; i < com_buffers_data_read_status_.size(); i++) {
+    running |= (com_buffers_data_read_status_[i] < calculated_blobs_.size());
+  }
+  for (long i = 0; i < com_buffers_data_write_status_.size(); i++) {
+    running |= (com_buffers_data_write_status_[i] < calculated_blobs_.size());
+  }
+  return !running;
+}
+
+template <typename Dtype>
+void Net<Dtype>::MarkDataAsUpdatedOnMasterNode(void) {
+  if (com_buffers_data_read_.size() == 0) {
+    update_status_ = calculated_blobs_.size();
+  }
+}
+
+template <typename Dtype>
+void Net<Dtype>::CommunicateLayerData() {
   if (!gpi_communication_) return;
 
-//  gaspi_pointer_t p;
-//  SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_data_, &p));
-//  Dtype* const buffer((Dtype*)p);
-//
-//  //get data
-//  if (gpi_master_) {
-//    while (CommunicateLayerDiffReadFinished(com_data_read_status_[0])) {
-//      const int param_id =
-//        FindLearnableParamsID(calculated_blobs_[com_data_read_status_[0]]);
-//      learnable_params_[param_id]->scale_diff(1.0 / num_ranks_);
-////todo collect data from other gpus here before updating
-//      solver->ApplyUpdateLayer(param_id);
-//      memcpy(&buffer[learnable_params_size_aggregated_[param_id]],
-//             learnable_params_[param_id]->cpu_data(),
-//             learnable_params_[param_id]->count() * sizeof(Dtype));
-//      com_data_read_status_[0]++;
-//    }
-//  } else {
-//    gaspi_notification_t v;
-//    SUCCESS_OR_DIE(gaspi_notify_reset(segment_id_data_,
-//                                      notification_id_data_,
-//                                      &v));
-//    com_data_read_status_[0] = std::max<int>(com_data_read_status_[0], v);
-//  }
-//
-//  //send data
-//  gaspi_wait(queue_data_, GASPI_BLOCK);//todo wait only if queue full
-//
-//  for (int ch = 0; ch < com_data_write_status_.size(); ch++) {
-//    while (com_data_write_status_[ch] < com_data_read_status_[0]) {
-//      const int param_id =
-//        FindLearnableParamsID(calculated_blobs_[com_data_write_status_[ch]]);
-//
-////      SUCCESS_OR_DIE(gaspi_write_notify(
-////        segment_id_data_,
-////        learnable_params_size_aggregated_[param_id],
-////        send_data_ranks_[ch],
-////        segment_id_data_,
-////        learnable_params_size_aggregated_[param_id],
-////        learnable_params_[param_id]->count() * sizeof(Dtype),
-////        notification_id_data_,
-////        ++com_data_write_status_[ch],
-////        queue_data_,
-////        GASPI_BLOCK));
-//      SUCCESS_OR_DIE(gaspi_notify(
-//        segment_id_data_,
-//        send_data_ranks_[ch],
-//        notification_id_data_,
-//        ++com_data_write_status_[ch],
-//        queue_data_,
-//        GASPI_BLOCK));
-//    }
-//  }
-//
-//  //import data
-//  if (!gpi_master_) {
-//    while (com_data_import_status_[0] < com_data_read_status_[0]) {
-//      Blob<Dtype>& blob = *calculated_blobs_[com_data_import_status_[0]];
-//      const int param_id = FindLearnableParamsID(&blob);
-////      memcpy(blob.mutable_cpu_data(),
-////             &buffer[learnable_params_size_aggregated_[param_id]],
-////             blob.count() * sizeof(Dtype));
-//      com_data_import_status_[0]++;
-//    }
-//  }
+  for (long i = 0; i < com_buffers_data_read_.size(); i++) {
+    RingBufferRead<Dtype>& buffer = com_buffers_data_read_[i];
+    while (com_buffers_data_read_status_[i] < calculated_blobs_.size()) {
+      Blob<Dtype>& blob = *calculated_blobs_[com_buffers_data_read_status_[i]];
+      if (buffer.Read(blob.mutable_cpu_data(), blob.count())) {
+        break;
+      } else {
+        com_buffers_data_read_status_[i]++;
+        update_status_++;
+      }
+    }
+  }
+  for (long i = 0; i < com_buffers_data_write_.size(); i++) {
+    RingBufferWrite<Dtype>& buffer = com_buffers_data_write_[i];
+    while (com_buffers_data_write_status_[i] < update_status_) {
+      Blob<Dtype>& blob = *calculated_blobs_[com_buffers_data_write_status_[i]];
+      if (buffer.Write(blob.cpu_data(), blob.count())) {
+        break;
+      } else {
+        com_buffers_data_write_status_[i]++;
+      }
+    }
+  }
 }
 
 template <typename Dtype>
 void Net<Dtype>::CommunicateLayerDiffAndDataBlocking(Solver<Dtype>* solver) {
   while(!CommunicateLayerDiffAndDataFinished()) {
     CommunicateLayerDiff();
-    CommunicateLayerData(solver);
+    UpdateLayersWithSolver(solver);
+    CommunicateLayerData();
   }
 }
 
 template <typename Dtype>
 bool Net<Dtype>::CommunicateLayerDiffAndDataFinished(void) {
-  int running = 0;
-  for (long i = 0; i < com_buffers_data_read_status_.size(); i++) {
-    running |= (com_buffers_data_read_status_[i] < calculated_blobs_.size());
-//    gaspi_printf("com_data_read_status_ = %d\n", com_data_read_status_[i]);
-  }
+  int running = !CommunicateLayerDiffFinished();
+  running |= !CommunicateLayerDataFinished();
+  running |= (update_status_ < calculated_blobs_.size());
+
   return !running;
+}
+
+template <typename Dtype>
+void Net<Dtype>::UpdateLayersWithSolver(Solver<Dtype>* solver) {
+  if (com_buffers_data_read_.size() == 0) {// I am master
+    while (CommunicateLayerDiffReadFinished(update_status_)) {
+      const int param_id =
+        FindLearnableParamsID(calculated_blobs_[update_status_]);
+      learnable_params_[param_id]->scale_diff(1.0 / num_ranks_);
+      solver->ApplyUpdateLayer(param_id);
+      update_status_++;
+    }
+  }
 }
 
 template <typename Dtype>

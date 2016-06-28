@@ -1107,6 +1107,38 @@ std::vector<gaspi_rank_t>  Net<Dtype>::GetDiffTreeReadRanks(gaspi_rank_t rank) {
 
 template <typename Dtype>
 void Net<Dtype>::BuildLayerDataCommunication() {
+
+  int segment_id = 10;
+   for (int i = layers_.size() - 1; i >= 0; --i) {
+     if (layer_need_backward_[i]) {
+       vector<shared_ptr<Blob<Dtype> > >& blobs = layers_[i].get()->blobs();
+       for (int j = 0; j < blobs.size(); j++) {
+         Blob<Dtype>* p = blobs[j].get();
+         com_buffers_data_.push_back(CommunicatorModel<Dtype>(
+           p, segment_id, queue_data_write,
+           queue_data_acknowledge_, rank_, num_ranks_));
+         segment_id++;
+       }
+     }
+   }
+
+ //  for (int rank=0; rank < num_ranks_; rank++) {
+ //    if (rank==rank_) {
+ //      std::cout << "##############  Rank " << rank << std::endl;
+ //      for (int i = 0; i < com_buffers_data_.size(); i++) {
+ //        std::cout << "layer " << i << std::endl;
+ //        com_buffers_data_[i].status(std::cout);
+ //        std::cout << std::endl;
+ //      }
+ //    }
+ //    gaspi_barrier(GASPI_GROUP_ALL, GASPI_BLOCK);
+ //    sleep(5);
+ //  }
+ //  sleep(100000);
+   //------------------------------------------------------------------------
+
+
+
   const long buffer_size = //can store full model
     learnable_params_size_aggregated_.back() + 1;
   const int bf = GetDataTreeBranchingFactor();

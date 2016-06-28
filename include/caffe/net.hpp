@@ -13,6 +13,7 @@
 #include "caffe/layer.hpp"
 #include "caffe/proto/caffe.pb.h"
 #include "gpi_ring_buffer.hpp"
+#include "gpi_communicator_model.hpp"
 
 namespace caffe {
 
@@ -398,10 +399,13 @@ class Net {
   vector<RingBufferWrite<Dtype> > com_buffers_data_write_;
   vector<int> com_buffers_data_read_status_;
   vector<int> com_buffers_data_write_status_;
+  vector<CommunicatorModel<Dtype> > com_buffers_data_;
   int update_status_;
   gaspi_notification_id_t loss_buffer_index_;
   static const gaspi_queue_id_t queue_diff_ = 0;
   static const gaspi_queue_id_t queue_data_ = 1;
+  static const gaspi_queue_id_t queue_data_write = 5;
+  static const gaspi_queue_id_t queue_data_acknowledge_ = 6;
   static const gaspi_queue_id_t queue_loss_ = 2;
   static const gaspi_segment_id_t segment_id_diff_ = 0;
   static const gaspi_segment_id_t segment_id_data_ = 1;

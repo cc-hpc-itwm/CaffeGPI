@@ -47,13 +47,14 @@ void TransferForwardProducer::operator()(void) {
   }
 }
 
-void TransferForwardProducer::LiftLocalStatus(void) {
-  status_we_have_++;
-  (*this)();
+void TransferForwardProducer::LiftLocalStatus(long status) {
+  if (status > status_we_have_) {
+    status_we_have_ = status;
+  }
 }
 
 unsigned long TransferForwardProducer::GetLocalAcknowledgement(void) {
-  if (status_we_have_sent_ < status_we_acknowledge_) {
+  if (status_we_have_sent_ > status_we_acknowledge_) {
     gaspi_return_t err = gaspi_wait(queue_, GASPI_TEST);
     if (err == GASPI_SUCCESS) {
       status_we_acknowledge_ = status_we_have_sent_;
@@ -116,7 +117,7 @@ unsigned long TransferForwardConsumer::GetStatus(void) {
   return status_;
 }
 
-void TransferForwardConsumer::SetAcknoledgement(void) {
+void TransferForwardConsumer::SetAcknowledgement(void) {
   ClearQueue();
   SUCCESS_OR_DIE(gaspi_notify(segment_id_, rank_, notification_id_remote_,
                               status_ + 1, queue_, GASPI_BLOCK));
@@ -153,7 +154,10 @@ CommunicatorModel<Dtype>::CommunicatorModel(
 : blob_(blob),
   segment_id_(segment_id),
   queue_send_(queue_transfer),
-  queue_acknowledge_(queue_acknowledge) {
+  queue_acknowledge_(queue_acknowledge),
+  status_(0),
+  acknowledgement_local_(),
+  acknowledgement_total_(){
 
   const long segment_size =  blob->count() * sizeof(Dtype);
   SUCCESS_OR_DIE(gaspi_segment_use(segment_id_, blob->mutable_cpu_data(),
@@ -203,6 +207,58 @@ CommunicatorModel<Dtype>::CommunicatorModel(
 template <typename Dtype>
 CommunicatorModel<Dtype>::~CommunicatorModel() {
   SUCCESS_OR_DIE(gaspi_segment_delete(segment_id_));
+}
+
+
+
+template <typename Dtype>
+void CommunicatorModel<Dtype>::operator()(void) {
+  UpdateStatus();
+  UpdateAcknowledgement();
+  SendModel();
+}
+
+template <typename Dtype>
+void CommunicatorModel<Dtype>::UpdateStatus() {
+  for (int i = 0; i < consumer_.size(); i++) {
+    status_ = consumer_[i].GetStatus();
+  }
+}
+
+template <typename Dtype>
+void CommunicatorModel<Dtype>::UpdateAcknowledgement() {
+  unsigned long acknowledgement = acknowledgement_local_;
+  for (int i = 0; i < producer_.size(); i++) {
+     acknowledgement =
+       std::min(acknowledgement, producer_[i].GetLocalAcknowledgement());
+  }
+  if (acknowledgement > acknowledgement_total_) {
+    for (int i = 0; i < consumer_.size(); i++) {
+      if (acknowledgement == consumer_[i].GetStatus()) {
+        consumer_[i].SetAcknowledgement();
+      }
+    }
+    acknowledgement_total_ = acknowledgement;
+  }
+}
+
+template <typename Dtype>
+void CommunicatorModel<Dtype>::SendModel() {
+  for (int i = 0; i < producer_.size(); i++) {
+    producer_[i].LiftLocalStatus(status_);
+    producer_[i]();
+  }
+}
+
+template <typename Dtype>
+void CommunicatorModel<Dtype>::Acknowledge(void) {
+  acknowledgement_local_++;
+  UpdateAcknowledgement();
+}
+
+template <typename Dtype>
+void CommunicatorModel<Dtype>::UpdateModel(void) {
+  status_++;
 }
 
 template <typename Dtype>

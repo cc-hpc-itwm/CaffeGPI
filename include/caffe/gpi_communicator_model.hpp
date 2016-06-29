@@ -19,7 +19,7 @@ public:
                           const gaspi_notification_id_t notification_id_remote,
                           const gaspi_queue_id_t queue);
   void operator()(void);
-  void LiftLocalStatus();
+  void LiftLocalStatus(long status);
   unsigned long GetLocalAcknowledgement();
   unsigned long GetRemoteAcknowledgement();
 
@@ -52,7 +52,7 @@ public:
                           const gaspi_notification_id_t notification_id_remote,
                           const gaspi_queue_id_t queue);
   unsigned long GetStatus(void);
-  void SetAcknoledgement();
+  void SetAcknowledgement();
   void status(std::ostream& s) const;
 
 private:
@@ -83,6 +83,8 @@ public:
 
 
   void operator()(void);
+  void Acknowledge(void);
+  void UpdateModel();
 
   void status(std::ostream& s) const;
 
@@ -94,6 +96,10 @@ private:
                                                  int branching_factor);
   int GetDataTreeBranchingFactor(long num_ranks);
 
+  void UpdateStatus();
+  void UpdateAcknowledgement();
+  void SendModel();
+
   static const long buffer_offset_ = 0;
   static const long notification_base_id_ = 1000;
 
@@ -101,6 +107,10 @@ private:
   gaspi_segment_id_t segment_id_;
   gaspi_queue_id_t queue_send_;
   gaspi_queue_id_t queue_acknowledge_;
+
+  unsigned long status_;
+  unsigned long acknowledgement_local_;
+  unsigned long acknowledgement_total_;
 
   std::vector<TransferForwardConsumer> consumer_;
   std::vector<TransferForwardProducer> producer_;

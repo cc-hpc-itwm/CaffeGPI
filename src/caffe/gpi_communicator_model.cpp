@@ -32,7 +32,7 @@ void TransferForwardProducer::operator()(void) {
   GetLocalAcknowledgement();
 
   if ((status_we_have_ > status_we_have_sent_)
-      && ((status_we_have_ - status_acknowledged_by_remote_) <= 1)) {
+      && ((status_we_have_ <= status_acknowledged_by_remote_))) {
     SUCCESS_OR_DIE(gaspi_write_notify(segment_id_,
                                       buffer_offset_local_,
                                       rank_,
@@ -156,8 +156,8 @@ CommunicatorModel<Dtype>::CommunicatorModel(
   queue_send_(queue_transfer),
   queue_acknowledge_(queue_acknowledge),
   status_(0),
-  acknowledgement_local_(),
-  acknowledgement_total_(){
+  acknowledgement_local_(0),
+  acknowledgement_total_(0){
 
   const long segment_size =  blob->count() * sizeof(Dtype);
   SUCCESS_OR_DIE(gaspi_segment_use(segment_id_, blob->mutable_cpu_data(),
@@ -253,12 +253,26 @@ void CommunicatorModel<Dtype>::SendModel() {
 template <typename Dtype>
 void CommunicatorModel<Dtype>::Acknowledge(void) {
   acknowledgement_local_++;
+  blob_->mutable_cpu_data();
   UpdateAcknowledgement();
 }
 
 template <typename Dtype>
-void CommunicatorModel<Dtype>::UpdateModel(void) {
-  status_++;
+void CommunicatorModel<Dtype>::UpdateModelOnMaster(void) {
+  if (!HaveUpdateSource()) {
+    status_++;
+  }
+}
+
+template <typename Dtype>
+bool CommunicatorModel<Dtype>::HaveUpdateSource(void) const {
+  return !consumer_.size();
+}
+
+template <typename Dtype>
+bool CommunicatorModel<Dtype>::Complete() {
+  UpdateAcknowledgement();
+  return (acknowledgement_total_==acknowledgement_local_);
 }
 
 template <typename Dtype>

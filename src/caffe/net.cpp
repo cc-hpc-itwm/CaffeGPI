@@ -1108,19 +1108,22 @@ std::vector<gaspi_rank_t>  Net<Dtype>::GetDiffTreeReadRanks(gaspi_rank_t rank) {
 template <typename Dtype>
 void Net<Dtype>::BuildLayerDataCommunication() {
 
-  int segment_id = 10;
-   for (int i = layers_.size() - 1; i >= 0; --i) {
-     if (layer_need_backward_[i]) {
-       vector<shared_ptr<Blob<Dtype> > >& blobs = layers_[i].get()->blobs();
-       for (int j = 0; j < blobs.size(); j++) {
-         Blob<Dtype>* p = blobs[j].get();
-         com_buffers_data_.push_back(CommunicatorModel<Dtype>(
-           p, segment_id, queue_data_write,
-           queue_data_acknowledge_, rank_, num_ranks_));
-         segment_id++;
-       }
-     }
-   }
+  int segment_id = segment_id_data_base_;
+  for (int i = layers_.size() - 1; i >= 0; --i) {
+    if (layer_need_backward_[i]) {
+      vector<shared_ptr<Blob<Dtype> > >& blobs = layers_[i].get()->blobs();
+      for (int j = 0; j < blobs.size(); j++) {
+        Blob<Dtype>* p = blobs[j].get();
+        CommunicatorModel<Dtype> buffer(p, segment_id, queue_data_write,
+                                        queue_data_acknowledge_, rank_,
+                                        num_ranks_);
+        buffer.Acknowledge();
+        buffer.UpdateModelOnMaster();
+        com_buffers_data_.push_back(buffer);
+        segment_id++;
+      }
+    }
+  }
 
  //  for (int rank=0; rank < num_ranks_; rank++) {
  //    if (rank==rank_) {
@@ -1137,61 +1140,6 @@ void Net<Dtype>::BuildLayerDataCommunication() {
  //  sleep(100000);
    //------------------------------------------------------------------------
 
-
-
-  const long buffer_size = //can store full model
-    learnable_params_size_aggregated_.back() + 1;
-  const int bf = GetDataTreeBranchingFactor();
-  std::vector<gaspi_rank_t> ranks_read = GetDataTreeReadRanks(rank_, bf);
-  std::vector<gaspi_rank_t> ranks_write = GetDataTreeWriteRanks(rank_, bf);
-
-  const long data_segment_size
-    = buffer_size * (ranks_read.size() + ranks_write.size());
-  SUCCESS_OR_DIE(gaspi_segment_create(segment_id_data_,
-                                      data_segment_size * sizeof(Dtype),
-                                      GASPI_GROUP_ALL,
-                                      GASPI_BLOCK,
-                                      GASPI_MEM_UNINITIALIZED));
-
-  long buffer_index = 0;
-
-  for (int i = 0; i < ranks_write.size(); i++) {
-    const int rank_remote = ranks_write[i];
-
-    std::vector<gaspi_rank_t> ranks_read_remote
-      = GetDataTreeReadRanks(rank_remote, bf);
-    std::vector<gaspi_rank_t> ranks_write_remote
-      = GetDataTreeWriteRanks(rank_remote, bf);
-    const long buffer_index_remote = ranks_write_remote.size()
-        + std::find(ranks_read_remote.begin(), ranks_read_remote.end(), rank_)
-        - ranks_read_remote.begin();
-
-    com_buffers_data_write_.push_back(RingBufferWrite<Dtype>(
-      buffer_size, segment_id_data_, notification_id_data_ + buffer_index,
-      buffer_index * buffer_size * sizeof(Dtype),
-      rank_remote, segment_id_data_, notification_id_data_ + buffer_index_remote,
-      buffer_index_remote * buffer_size * sizeof(Dtype), queue_data_));
-    com_buffers_data_write_status_.push_back(0);
-    buffer_index++;
-  }
-
-  for (int i = 0; i < ranks_read.size(); i++) {
-    const int rank_remote = ranks_read[i];
-
-    std::vector<gaspi_rank_t> ranks_write_remote
-      = GetDataTreeWriteRanks(rank_remote, bf);
-    const long buffer_index_remote =
-        std::find(ranks_write_remote.begin(), ranks_write_remote.end(), rank_)
-        - ranks_write_remote.begin();
-
-    com_buffers_data_read_.push_back(RingBufferRead<Dtype>(
-      buffer_size, segment_id_data_, notification_id_data_ + buffer_index,
-      buffer_index * buffer_size * sizeof(Dtype),
-      rank_remote, segment_id_data_, notification_id_data_ + buffer_index_remote,
-      buffer_index_remote * buffer_size * sizeof(Dtype), queue_data_));
-    com_buffers_data_read_status_.push_back(0);
-    buffer_index++;
-  }
 }
 
 template <typename Dtype>
@@ -1246,19 +1194,22 @@ void Net<Dtype>::ResetCommunicationStatus(void) {
   for (int i = 0; i < com_buffers_diff_write_status_.size(); i++)
     com_buffers_diff_write_status_[i] = 0;
   calculated_blobs_.resize(0);
-  for (int i = 0; i < com_buffers_data_write_status_.size(); i++)
-    com_buffers_data_write_status_[i] = 0;
-  for (int i = 0; i < com_buffers_data_read_status_.size(); i++)
-    com_buffers_data_read_status_[i] = 0;
   update_status_ = 0;
 }
 
 template <typename Dtype>
 void Net<Dtype>::AppendLayerToCalculatedBlobs(int index) {
+  int j = calculated_blobs_.size();
+
   vector<shared_ptr<Blob<Dtype> > >& blobs = layers_[index].get()->blobs();
   for (int i = 0; i < blobs.size(); i++) {
     calculated_blobs_.push_back(blobs[i].get());
   }
+
+  for (; j < calculated_blobs_.size(); j++) {
+    com_buffers_data_[j].Acknowledge();
+  }
+
 }
 
 template <typename Dtype>
@@ -1335,19 +1286,20 @@ void Net<Dtype>::CommunicateDataBlocking(void) {
 template <typename Dtype>
 bool Net<Dtype>::CommunicateLayerDataFinished(void) {
   int running = 0;
-  for (long i = 0; i < com_buffers_data_read_status_.size(); i++) {
-    running |= (com_buffers_data_read_status_[i] < calculated_blobs_.size());
-  }
-  for (long i = 0; i < com_buffers_data_write_status_.size(); i++) {
-    running |= (com_buffers_data_write_status_[i] < calculated_blobs_.size());
+  for (long i = 0; i < com_buffers_data_.size(); i++) {
+    running |= !com_buffers_data_[i].Complete();
   }
   return !running;
 }
 
 template <typename Dtype>
 void Net<Dtype>::MarkDataAsUpdatedOnMasterNode(void) {
-  if (com_buffers_data_read_.size() == 0) {
-    update_status_ = calculated_blobs_.size();
+  for (int i = 0; i < com_buffers_data_.size(); i++) {
+    CommunicatorModel<Dtype>& buffer = com_buffers_data_[i];
+    if (!buffer.HaveUpdateSource()) {
+      buffer.UpdateModelOnMaster();
+      update_status_ = calculated_blobs_.size();
+    }
   }
 }
 
@@ -1355,28 +1307,8 @@ template <typename Dtype>
 void Net<Dtype>::CommunicateLayerData() {
   if (!gpi_communication_) return;
 
-  for (long i = 0; i < com_buffers_data_read_.size(); i++) {
-    RingBufferRead<Dtype>& buffer = com_buffers_data_read_[i];
-    while (com_buffers_data_read_status_[i] < calculated_blobs_.size()) {
-      Blob<Dtype>& blob = *calculated_blobs_[com_buffers_data_read_status_[i]];
-      if (buffer.Read(blob.mutable_cpu_data(), blob.count())) {
-        break;
-      } else {
-        com_buffers_data_read_status_[i]++;
-        update_status_++;
-      }
-    }
-  }
-  for (long i = 0; i < com_buffers_data_write_.size(); i++) {
-    RingBufferWrite<Dtype>& buffer = com_buffers_data_write_[i];
-    while (com_buffers_data_write_status_[i] < update_status_) {
-      Blob<Dtype>& blob = *calculated_blobs_[com_buffers_data_write_status_[i]];
-      if (buffer.Write(blob.cpu_data(), blob.count())) {
-        break;
-      } else {
-        com_buffers_data_write_status_[i]++;
-      }
-    }
+  for (long i = 0; i < com_buffers_data_.size(); i++) {
+    com_buffers_data_[i]();
   }
 }
 
@@ -1400,14 +1332,15 @@ bool Net<Dtype>::CommunicateLayerDiffAndDataFinished(void) {
 
 template <typename Dtype>
 void Net<Dtype>::UpdateLayersWithSolver(Solver<Dtype>* solver) {
-  if (com_buffers_data_read_.size() == 0) {// I am master
-    while (CommunicateLayerDiffReadFinished(update_status_)) {
-      const int param_id =
-        FindLearnableParamsID(calculated_blobs_[update_status_]);
-      learnable_params_[param_id]->scale_diff(1.0 / num_ranks_);
-      solver->ApplyUpdateLayer(param_id);
-      update_status_++;
-    }
+
+  while (CommunicateLayerDiffReadFinished(update_status_)
+         && !com_buffers_data_[update_status_].HaveUpdateSource()) {
+    const int param_id =
+      FindLearnableParamsID(calculated_blobs_[update_status_]);
+    learnable_params_[param_id]->scale_diff(1.0 / num_ranks_);
+    solver->ApplyUpdateLayer(param_id);
+    com_buffers_data_[update_status_].UpdateModelOnMaster();
+    update_status_++;
   }
 }
 

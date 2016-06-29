@@ -84,7 +84,9 @@ public:
 
   void operator()(void);
   void Acknowledge(void);
-  void UpdateModel();
+  void UpdateModelOnMaster(void);
+  bool HaveUpdateSource(void) const;
+  bool Complete();
 
   void status(std::ostream& s) const;
 
@@ -108,9 +110,9 @@ private:
   gaspi_queue_id_t queue_send_;
   gaspi_queue_id_t queue_acknowledge_;
 
-  unsigned long status_;
-  unsigned long acknowledgement_local_;
-  unsigned long acknowledgement_total_;
+  unsigned long status_;// version we currently have
+  unsigned long acknowledgement_local_; //local proces ready for this
+  unsigned long acknowledgement_total_; //all consumer and local proces ready for this
 
   std::vector<TransferForwardConsumer> consumer_;
   std::vector<TransferForwardProducer> producer_;

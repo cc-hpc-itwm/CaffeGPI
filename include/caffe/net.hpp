@@ -131,7 +131,8 @@ class Net {
 
   // Communicate layers
   void CommunicateDataBlocking(void);
-  bool AmIGPIMaster(void) {return !com_buffers_data_read_.size();}
+  bool AmIGPIMaster(void) {
+    return !com_buffers_data_.size() || !com_buffers_data_[0].HaveUpdateSource();}
   void MarkDataAsUpdatedOnMasterNode(void);
 
   /// @brief Updates the network weights based on the diff values computed.
@@ -395,10 +396,6 @@ class Net {
   vector<int> com_buffers_diff_read_status_;
   vector<int> com_buffers_diff_write_status_;
   vector<Blob<Dtype>* > calculated_blobs_;
-  vector<RingBufferRead<Dtype> > com_buffers_data_read_;
-  vector<RingBufferWrite<Dtype> > com_buffers_data_write_;
-  vector<int> com_buffers_data_read_status_;
-  vector<int> com_buffers_data_write_status_;
   vector<CommunicatorModel<Dtype> > com_buffers_data_;
   int update_status_;
   gaspi_notification_id_t loss_buffer_index_;
@@ -408,8 +405,8 @@ class Net {
   static const gaspi_queue_id_t queue_data_acknowledge_ = 6;
   static const gaspi_queue_id_t queue_loss_ = 2;
   static const gaspi_segment_id_t segment_id_diff_ = 0;
-  static const gaspi_segment_id_t segment_id_data_ = 1;
-  static const gaspi_segment_id_t segment_id_loss_ = 2;
+  static const gaspi_segment_id_t segment_id_data_base_ = 2;
+  static const gaspi_segment_id_t segment_id_loss_ = 1;
   static const gaspi_notification_id_t notification_id_diff_ = 0;
   static const gaspi_notification_id_t notification_id_data_ = 0;
   static const gaspi_notification_id_t notification_id_loss_ = 0;

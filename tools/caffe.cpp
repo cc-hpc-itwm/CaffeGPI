@@ -225,6 +225,8 @@ int train() {
   }
   LOG(INFO) << "Optimization Done.";
 
+  solver.reset();//cleanup everything before proc_term
+
   SUCCESS_OR_DIE(gaspi_barrier(GASPI_GROUP_ALL, GASPI_BLOCK));
   SUCCESS_OR_DIE(gaspi_proc_term (GASPI_BLOCK));
 

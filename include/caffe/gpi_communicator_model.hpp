@@ -18,15 +18,15 @@ public:
                           const gaspi_notification_id_t notification_id_local,
                           const gaspi_notification_id_t notification_id_remote,
                           const gaspi_queue_id_t queue);
-  void operator()(void);
   void LiftLocalStatus(long status);
-  unsigned long GetLocalAcknowledgement();
-  unsigned long GetRemoteAcknowledgement();
+  unsigned long GetStartedSending();
+  unsigned long GetAcknowledgement();
 
   void status(std::ostream& s) const;
 
 
 private:
+  unsigned long GetRemoteAcknowledgement();
 
   long size_;
   gaspi_rank_t rank_;
@@ -38,10 +38,10 @@ private:
   gaspi_queue_id_t queue_;
 
   unsigned long status_we_have_;
-  unsigned long status_we_have_sent_;
-  unsigned long status_we_acknowledge_;
 
-  unsigned long status_acknowledged_by_remote_;
+  unsigned long status_we_started_sending_;
+  unsigned long status_we_finished_sending_;
+  unsigned long status_acknowledged_by_remote_;//this version can be overwritten
 };
 
 class TransferForwardConsumer {
@@ -84,13 +84,14 @@ public:
 
   void operator()(void);
   void Acknowledge(void);
-  void UpdateModelOnMaster(void);
+  void UpdatedModelOnMaster(void);
   bool HaveUpdateSource(void) const;
   bool Complete();
 
   void status(std::ostream& s) const;
 
 private:
+  CommunicatorModel(const CommunicatorModel<Dtype> &);
   std::vector<gaspi_rank_t> GetDataTreeWriteRanks(gaspi_rank_t rank,
                                                   gaspi_rank_t num_ranks,
                                                   int branching_factor);
@@ -99,8 +100,8 @@ private:
   int GetDataTreeBranchingFactor(long num_ranks);
 
   void UpdateStatus();
-  void UpdateAcknowledgement();
-  void SendModel();
+  void UpdateStatusCompleted();
+  void UpdateAcknowledgementTotal();
 
   static const long buffer_offset_ = 0;
   static const long notification_base_id_ = 1000;
@@ -110,9 +111,11 @@ private:
   gaspi_queue_id_t queue_send_;
   gaspi_queue_id_t queue_acknowledge_;
 
+  unsigned long acknowledgement_local_;//local process ready for this version
+
   unsigned long status_;// version we currently have
-  unsigned long acknowledgement_local_; //local proces ready for this
-  unsigned long acknowledgement_total_; //all consumer and local proces ready for this
+  unsigned long status_completed_;// version we have and transferred to other nodes
+  unsigned long acknowledgement_total_;//this version can be overwritten
 
   std::vector<TransferForwardConsumer> consumer_;
   std::vector<TransferForwardProducer> producer_;

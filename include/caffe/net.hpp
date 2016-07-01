@@ -32,7 +32,7 @@ class Net {
   explicit Net(const NetParameter& param, const Net* root_net = NULL);
   explicit Net(const string& param_file, Phase phase,
       const Net* root_net = NULL);
-  virtual ~Net() {}
+  virtual ~Net();
 
   /// @brief Initialize a network with a NetParameter.
   void Init(const NetParameter& param);
@@ -132,7 +132,7 @@ class Net {
   // Communicate layers
   void CommunicateDataBlocking(void);
   bool AmIGPIMaster(void) {
-    return !com_buffers_data_.size() || !com_buffers_data_[0].HaveUpdateSource();}
+    return !com_buffers_data_.size() || !com_buffers_data_[0]->HaveUpdateSource();}
   void MarkDataAsUpdatedOnMasterNode(void);
 
   /// @brief Updates the network weights based on the diff values computed.
@@ -299,6 +299,7 @@ class Net {
   void UpdateDebugInfo(const int param_id);
 
   // Communicate layers
+  void CheckAvailableSegments();
   void BuildLayerDiffCommunication();
   std::vector<gaspi_rank_t> GetDiffTreeWriteRanks(gaspi_rank_t rank);
   std::vector<gaspi_rank_t> GetDiffTreeReadRanks(gaspi_rank_t rank);
@@ -396,7 +397,7 @@ class Net {
   vector<int> com_buffers_diff_read_status_;
   vector<int> com_buffers_diff_write_status_;
   vector<Blob<Dtype>* > calculated_blobs_;
-  vector<CommunicatorModel<Dtype> > com_buffers_data_;
+  vector<shared_ptr<CommunicatorModel<Dtype> > > com_buffers_data_;
   int update_status_;
   gaspi_notification_id_t loss_buffer_index_;
   static const gaspi_queue_id_t queue_diff_ = 0;

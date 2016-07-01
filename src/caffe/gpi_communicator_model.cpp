@@ -1,5 +1,6 @@
 #include "caffe/gpi_communicator_model.hpp"
 #include <algorithm>
+//#include <GASPI_Ext.h>
 
 namespace caffe {
 
@@ -21,18 +22,21 @@ TransferForwardProducer::TransferForwardProducer(
   notification_id_remote_(notification_id_remote),
   queue_(queue),
   status_we_have_(0),
-  status_we_have_sent_(0),
-  status_we_acknowledge_(0),
+  status_we_started_sending_(0),
+  status_we_finished_sending_(0),
   status_acknowledged_by_remote_(0){
 
 }
 
-void TransferForwardProducer::operator()(void) {
-  GetRemoteAcknowledgement();
-  GetLocalAcknowledgement();
+void TransferForwardProducer::LiftLocalStatus(long status) {
+  if (status > status_we_have_) {
+    status_we_have_ = status;
+  }
+}
 
-  if ((status_we_have_ > status_we_have_sent_)
-      && ((status_we_have_ <= status_acknowledged_by_remote_))) {
+unsigned long TransferForwardProducer::GetStartedSending() {
+  if ((status_we_have_ > status_we_started_sending_)
+      && ((status_we_have_ <= (GetRemoteAcknowledgement() + 1)))) {
     SUCCESS_OR_DIE(gaspi_write_notify(segment_id_,
                                       buffer_offset_local_,
                                       rank_,
@@ -43,26 +47,21 @@ void TransferForwardProducer::operator()(void) {
                                       status_we_have_ + 1,//zero is not allowed as notification
                                       queue_,
                                       GASPI_BLOCK));
-    status_we_have_sent_ = status_we_have_;
+    status_we_started_sending_ = status_we_have_;
   }
+  return status_we_started_sending_;
 }
 
-void TransferForwardProducer::LiftLocalStatus(long status) {
-  if (status > status_we_have_) {
-    status_we_have_ = status;
-  }
-}
-
-unsigned long TransferForwardProducer::GetLocalAcknowledgement(void) {
-  if (status_we_have_sent_ > status_we_acknowledge_) {
+unsigned long TransferForwardProducer::GetAcknowledgement(void) {
+  if (status_we_started_sending_ > status_we_finished_sending_) {
     gaspi_return_t err = gaspi_wait(queue_, GASPI_TEST);
     if (err == GASPI_SUCCESS) {
-      status_we_acknowledge_ = status_we_have_sent_;
+      status_we_finished_sending_ = status_we_started_sending_;
     } else if (err != GASPI_TIMEOUT) {
       SUCCESS_OR_DIE(err);
     }
   }
-  return status_we_acknowledge_;
+  return status_we_finished_sending_;
 }
 
 unsigned long TransferForwardProducer::GetRemoteAcknowledgement(void) {
@@ -84,8 +83,8 @@ void TransferForwardProducer::status(std::ostream& s) const {
     << " notification_id_remote_=" << notification_id_remote_
     << " queue_=" << long(queue_)
     << " status_we_have_=" << status_we_have_
-    << " status_we_have_sent_=" << status_we_have_sent_
-    << " status_we_acknowledge_=" << status_we_acknowledge_
+    << " status_we_started_sending_=" << status_we_started_sending_
+    << " status_we_finished_sending_=" << status_we_finished_sending_
     << " status_acknowledged_by_remote_=" << status_acknowledged_by_remote_;
 }
 
@@ -155,9 +154,10 @@ CommunicatorModel<Dtype>::CommunicatorModel(
   segment_id_(segment_id),
   queue_send_(queue_transfer),
   queue_acknowledge_(queue_acknowledge),
-  status_(0),
   acknowledgement_local_(0),
-  acknowledgement_total_(0){
+  status_(0),
+  status_completed_(0),
+  acknowledgement_total_(0) {
 
   const long segment_size =  blob->count() * sizeof(Dtype);
   SUCCESS_OR_DIE(gaspi_segment_use(segment_id_, blob->mutable_cpu_data(),
@@ -209,13 +209,11 @@ CommunicatorModel<Dtype>::~CommunicatorModel() {
   SUCCESS_OR_DIE(gaspi_segment_delete(segment_id_));
 }
 
-
-
 template <typename Dtype>
 void CommunicatorModel<Dtype>::operator()(void) {
   UpdateStatus();
-  UpdateAcknowledgement();
-  SendModel();
+  UpdateAcknowledgementTotal();
+  UpdateStatusCompleted();
 }
 
 template <typename Dtype>
@@ -226,39 +224,41 @@ void CommunicatorModel<Dtype>::UpdateStatus() {
 }
 
 template <typename Dtype>
-void CommunicatorModel<Dtype>::UpdateAcknowledgement() {
+void CommunicatorModel<Dtype>::UpdateAcknowledgementTotal() {
   unsigned long acknowledgement = acknowledgement_local_;
   for (int i = 0; i < producer_.size(); i++) {
-     acknowledgement =
-       std::min(acknowledgement, producer_[i].GetLocalAcknowledgement());
+    acknowledgement =
+      std::min(acknowledgement, producer_[i].GetAcknowledgement());
   }
   if (acknowledgement > acknowledgement_total_) {
+    acknowledgement_total_ = acknowledgement;
     for (int i = 0; i < consumer_.size(); i++) {
       if (acknowledgement == consumer_[i].GetStatus()) {
         consumer_[i].SetAcknowledgement();
       }
     }
-    acknowledgement_total_ = acknowledgement;
   }
 }
 
 template <typename Dtype>
-void CommunicatorModel<Dtype>::SendModel() {
+void CommunicatorModel<Dtype>::UpdateStatusCompleted() {
+  unsigned long completed = status_;
   for (int i = 0; i < producer_.size(); i++) {
     producer_[i].LiftLocalStatus(status_);
-    producer_[i]();
+    completed =
+      std::min(completed, producer_[i].GetStartedSending());
   }
+  status_completed_ = completed;
 }
 
 template <typename Dtype>
 void CommunicatorModel<Dtype>::Acknowledge(void) {
   acknowledgement_local_++;
   blob_->mutable_cpu_data();
-  UpdateAcknowledgement();
 }
 
 template <typename Dtype>
-void CommunicatorModel<Dtype>::UpdateModelOnMaster(void) {
+void CommunicatorModel<Dtype>::UpdatedModelOnMaster(void) {
   if (!HaveUpdateSource()) {
     status_++;
   }
@@ -266,13 +266,12 @@ void CommunicatorModel<Dtype>::UpdateModelOnMaster(void) {
 
 template <typename Dtype>
 bool CommunicatorModel<Dtype>::HaveUpdateSource(void) const {
-  return !consumer_.size();
+  return consumer_.size();
 }
 
 template <typename Dtype>
 bool CommunicatorModel<Dtype>::Complete() {
-  UpdateAcknowledgement();
-  return (acknowledgement_total_==acknowledgement_local_);
+  return (status_completed_ == (acknowledgement_local_ + 1));
 }
 
 template <typename Dtype>
@@ -325,6 +324,10 @@ void CommunicatorModel<Dtype>::status(std::ostream& s) const {
   s << "segment_id_=" << long(segment_id_)
     << " queue_send_=" << long(queue_send_)
     << " queue_acknowledge_=" << long(queue_acknowledge_)
+    << " acknowledgement_local_=" << acknowledgement_local_
+    << " status_=" << status_
+    << " status_completed_=" << status_completed_
+    << " acknowledgement_total_=" << acknowledgement_total_
     << std::endl;
   s  << "print consumer:" << std::endl;
   for (int i = 0; i < consumer_.size(); i++) {

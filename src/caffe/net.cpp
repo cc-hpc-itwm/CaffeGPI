@@ -1048,7 +1048,7 @@ void Net<Dtype>::BuildLayerDiffCommunication() {
 
   CheckAvailableSegments();
   const long diff_segment_size
-    = buffer_size * (ranks_read.size() + ranks_write.size());
+    = std::max(buffer_size * (ranks_read.size() + ranks_write.size()), 1ul);
   SUCCESS_OR_DIE(gaspi_segment_create(segment_id_diff_,
                                       diff_segment_size * sizeof(Dtype),
                                       GASPI_GROUP_ALL,
@@ -1350,6 +1350,7 @@ template <typename Dtype>
 void Net<Dtype>::UpdateLayersWithSolver(Solver<Dtype>* solver) {
 
   while (CommunicateLayerDiffReadFinished(update_status_)
+         && (update_status_ < calculated_blobs_.size())
          && !com_buffers_data_[update_status_]->HaveUpdateSource()) {
     const int param_id =
       FindLearnableParamsID(calculated_blobs_[update_status_]);

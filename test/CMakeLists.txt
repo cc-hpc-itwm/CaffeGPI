@@ -5,5 +5,5 @@ set(testSources
    )
 
 add_executable(runGPIRingBuffer ${testSources})
-target_link_libraries(runGPIRingBuffer ${GPI2_GPI_LIBRARIES} -lpthread)
+target_link_libraries(runGPIRingBuffer ${GPI2_GPI_LIBRARIES} ${Caffe_LINK} -lpthread)
 

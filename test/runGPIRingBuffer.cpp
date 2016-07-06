@@ -123,20 +123,20 @@ int main() {
   const long bufferSize = 10000;
   const long chunkMax = 100;
   const long nData = 0x10000000;
-  typedef int DType;
+  typedef double Dtype;
 
-  DType* bite = new DType[chunkMax];
+  Dtype* bite = new Dtype[chunkMax];
 
   const gaspi_segment_id_t segmentA = 5;
   const gaspi_segment_id_t segmentB = 7;
 
   SUCCESS_OR_DIE(gaspi_segment_create(segmentA,
-                                      bufferSize * sizeof(DType) + bufferOffsetA,
+                                      bufferSize * sizeof(Dtype) + bufferOffsetA,
                                       GASPI_GROUP_ALL,
                                       GASPI_BLOCK,
                                       GASPI_MEM_UNINITIALIZED));
   SUCCESS_OR_DIE(gaspi_segment_create(segmentB,
-                                      bufferSize * sizeof(DType) + bufferOffsetB,
+                                      bufferSize * sizeof(Dtype) + bufferOffsetB,
                                       GASPI_GROUP_ALL,
                                       GASPI_BLOCK,
                                       GASPI_MEM_UNINITIALIZED));
@@ -149,7 +149,7 @@ int main() {
       gaspi_notification_id_t notification_id_remote = 1111;
       const gaspi_queue_id_t queue = 1;
 
-      caffe::RingBufferWrite<DType> buffer(bufferSize, segment_id_local, notification_id_local,
+      caffe::RingBufferWrite<Dtype> buffer(bufferSize, segment_id_local, notification_id_local,
                                            bufferOffsetA, 1, segment_id_remote,
                                            notification_id_remote, bufferOffsetB,
                                            queue);
@@ -171,7 +171,7 @@ int main() {
       const gaspi_notification_id_t notification_id_remote = 17;
       const gaspi_queue_id_t queue = 2;
 
-      caffe::RingBufferRead<DType> buffer(bufferSize, segment_id_local, notification_id_local,
+      caffe::RingBufferRead<Dtype> buffer(bufferSize, segment_id_local, notification_id_local,
                                           bufferOffsetB, 0, segment_id_remote,
                                           notification_id_remote, bufferOffsetA,
                                           queue);
@@ -186,8 +186,9 @@ int main() {
         for (long i=0; i<chunk; i++) {
           check |= (bite[i] != ++counter);
         }
-//        if (check) gaspi_printf("Error in Block starting with %ld\n", counter-chunk);
-//        gaspi_printf("%lu\n", counter);
+        if (check) std::cout
+          << "Error in Block starting with " << counter-chunk << std::endl;
+//        printf("%lu\n", counter);
         //usleep(1);
       }
     }

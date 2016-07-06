@@ -1,4 +1,5 @@
 #include "caffe/gpi_ring_buffer.hpp"
+#include "caffe/util/math_functions.hpp"
 
 #include <limits>
 #include <string.h>
@@ -68,9 +69,7 @@ int RingBufferWrite<Dtype>::Write(const Dtype* p,
     //first chunk
     const long chunk = std::min(len, size_ - wp_);
     const long rest = len - chunk;
-    memcpy(((char*)buffer) + wp_ * sizeof(Dtype),
-           p,
-           chunk * sizeof(Dtype));
+    caffe_copy(chunk, p, ((Dtype*)buffer) + wp_);
 
     if (rest) {
       SUCCESS_OR_DIE(gaspi_write(segment_id_local_,
@@ -83,9 +82,7 @@ int RingBufferWrite<Dtype>::Write(const Dtype* p,
                                  GASPI_BLOCK));
       wp_ = 0;
       //second chunk
-      memcpy(((char*)buffer) + wp_ * sizeof(Dtype),
-             ((char*)p) + chunk * sizeof(Dtype),
-             rest * sizeof(Dtype));
+      caffe_copy(rest, ((Dtype*)p) + chunk, ((Dtype*)buffer) + wp_);
       SUCCESS_OR_DIE(gaspi_write_notify(segment_id_local_,
                                         buffer_offset_local_ +  wp_ * sizeof(Dtype),
                                         remote_rank_,
@@ -112,9 +109,7 @@ int RingBufferWrite<Dtype>::Write(const Dtype* p,
       wp_ = wpnew;
     }
   } else {
-    memcpy(((char*)buffer) + wp_ * sizeof(Dtype),
-           p,
-           len * sizeof(Dtype));
+    caffe_copy(len, p, ((Dtype*)buffer) + wp_);
     SUCCESS_OR_DIE(gaspi_write_notify(segment_id_local_,
                                       buffer_offset_local_ +  wp_ * sizeof(Dtype),
                                       remote_rank_,
@@ -207,23 +202,20 @@ int RingBufferRead<Dtype>::Add(Dtype* p,
   if (len > GetNumData()) return -1;
   if (rp_ <= wp_) {
     const Dtype* s = ((Dtype*) buffer) + rp_;
-    for (long i=0; i<len; i++)
-      p[i] += s[i];
+    caffe_axpy<Dtype>(len, 1.0, s, p);
     rp_ += len;
   } else {
     const unsigned long chunk = std::min(len, size_ - rp_);
     const unsigned long rest = len - chunk;
     const Dtype* s = ((Dtype*)buffer) + rp_;
-    for (long i=0; i<chunk; i++)
-      p[i] += s[i];
+    caffe_axpy<Dtype>(chunk, 1.0, s, p);
     rp_ += chunk;
     rp_ = rp_ % size_;
 
     if (rest > 0) {
       const Dtype* s = ((Dtype*)buffer) + rp_;
       Dtype* const d = p + chunk;
-      for (long i=0; i<rest; i++)
-        d[i] += s[i];
+      caffe_axpy<Dtype>(rest, 1.0, s, d);
       rp_ += rest;
     }
   }
@@ -245,24 +237,18 @@ int RingBufferRead<Dtype>::Read(Dtype* p,
                                 const unsigned long len) {
   if (len > GetNumData()) return -1;
   if (rp_ <= wp_) {
-    memcpy(p,
-           ((char*)buffer) + rp_ * sizeof(Dtype),
-           len * sizeof(Dtype));
+    caffe_copy(len, ((Dtype*)buffer) + rp_, p);
     rp_ += len;
   } else {
     const unsigned long chunk = std::min(len, size_ - rp_);
     const unsigned long rest = len - chunk;
 
-    memcpy(p,
-           ((char*)buffer) + rp_ * sizeof(Dtype),
-           chunk * sizeof(Dtype));
+    caffe_copy(chunk, ((Dtype*)buffer) + rp_, p);
     rp_ += chunk;
     rp_ = rp_ % size_;
 
     if (rest > 0) {
-      memcpy(((char*)p) + chunk * sizeof(Dtype),
-             ((char*)buffer) + rp_ * sizeof(Dtype),
-             rest * sizeof(Dtype));
+      caffe_copy(rest, ((Dtype*)buffer) + rp_, ((Dtype*)p) + chunk);
       rp_ += rest;
     }
   }
@@ -293,6 +279,4 @@ template class RingBufferWrite<float>;
 template class RingBufferRead<float>;
 template class RingBufferWrite<double>;
 template class RingBufferRead<double>;
-template class RingBufferWrite<int>;
-template class RingBufferRead<int>;
 }

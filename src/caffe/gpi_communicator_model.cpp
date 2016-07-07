@@ -253,8 +253,8 @@ void CommunicatorModel<Dtype>::UpdateStatusCompleted() {
 
 template <typename Dtype>
 void CommunicatorModel<Dtype>::Acknowledge(void) {
-  acknowledgement_local_++;
   blob_->mutable_cpu_data();
+  acknowledgement_local_++;
 }
 
 template <typename Dtype>

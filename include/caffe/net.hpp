@@ -304,11 +304,6 @@ class Net {
   std::vector<gaspi_rank_t> GetDiffTreeWriteRanks(gaspi_rank_t rank);
   std::vector<gaspi_rank_t> GetDiffTreeReadRanks(gaspi_rank_t rank);
   void BuildLayerDataCommunication();
-  std::vector<gaspi_rank_t> GetDataTreeWriteRanks(gaspi_rank_t rank,
-                                                  int branching_factor);
-  std::vector<gaspi_rank_t> GetDataTreeReadRanks(gaspi_rank_t rank,
-                                                 int branching_factor);
-  int GetDataTreeBranchingFactor(void);
   void ResetCommunicationStatus(void);
   void AppendLayerToCalculatedBlobs(int index);
   void CommunicateLayerDiff(void);

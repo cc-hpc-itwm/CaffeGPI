@@ -1161,51 +1161,6 @@ void Net<Dtype>::BuildLayerDataCommunication() {
 }
 
 template <typename Dtype>
-std::vector<gaspi_rank_t> Net<Dtype>::GetDataTreeWriteRanks(
-  gaspi_rank_t rank, int branching_factor) {
-  std::vector<gaspi_rank_t> r;
-  for (long i = 1; i <= branching_factor; i++) {
-    const long remote_rank = branching_factor * long(rank) + i;
-    if (remote_rank < long(num_ranks_)) r.push_back(remote_rank);
-  }
-  return r;
-}
-
-template <typename Dtype>
-std::vector<gaspi_rank_t> Net<Dtype>::GetDataTreeReadRanks(
-  gaspi_rank_t rank, int branching_factor) {
-  std::vector<gaspi_rank_t> r;
-  if (rank > 0)
-    r.push_back((int(rank) - 1) / branching_factor);
-  return r;
-}
-
-template <typename Dtype>
-int Net<Dtype>::GetDataTreeBranchingFactor(void) {
-  static const long branch_max = 100;
-
-  long hops_final = num_ranks_;
-  long branch_final = 2;
-  for (long branch = 2; branch <= branch_max; branch++) {
-    long num_levels;
-    {
-      long ranks_in_level = 1;
-      long ranks_in_tree = 1;
-      for (num_levels = 0; ranks_in_tree < long(num_ranks_); num_levels++) {
-        ranks_in_level *= branch;
-        ranks_in_tree += ranks_in_level;
-      }
-    }
-    const long hops = branch * num_levels;
-    if (hops < hops_final) {
-      hops_final = hops;
-      branch_final = branch;
-    }
-  }
-  return branch_final;
-}
-
-template <typename Dtype>
 void Net<Dtype>::ResetCommunicationStatus(void) {
   for (int i = 0; i < com_buffers_diff_read_status_.size(); i++)
     com_buffers_diff_read_status_[i] = 0;

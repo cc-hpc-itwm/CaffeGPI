@@ -1043,8 +1043,9 @@ template <typename Dtype>
 void Net<Dtype>::BuildLayerDiffCommunication() {
   const long buffer_size = //can store full model
     learnable_params_size_aggregated_.back() + 1;
-  std::vector<gaspi_rank_t> ranks_read = GetDiffTreeReadRanks(rank_);
-  std::vector<gaspi_rank_t> ranks_write = GetDiffTreeWriteRanks(rank_);
+  const int bf = GetDiffTreeBranchingFactor();
+  std::vector<gaspi_rank_t> ranks_read = GetDiffTreeReadRanks(rank_, bf);
+  std::vector<gaspi_rank_t> ranks_write = GetDiffTreeWriteRanks(rank_, bf);
 
   CheckAvailableSegments();
   const long diff_segment_size
@@ -1060,8 +1061,8 @@ void Net<Dtype>::BuildLayerDiffCommunication() {
   for (int i = 0; i < ranks_write.size(); i++) {
     const int rank_remote = ranks_write[i];
 
-    std::vector<gaspi_rank_t> ranks_read_remote = GetDiffTreeReadRanks(rank_remote);
-    std::vector<gaspi_rank_t> ranks_write_remote = GetDiffTreeWriteRanks(rank_remote);
+    std::vector<gaspi_rank_t> ranks_read_remote = GetDiffTreeReadRanks(rank_remote, bf);
+    std::vector<gaspi_rank_t> ranks_write_remote = GetDiffTreeWriteRanks(rank_remote, bf);
     const long buffer_index_remote = ranks_write_remote.size()
         + std::find(ranks_read_remote.begin(), ranks_read_remote.end(), rank_)
         - ranks_read_remote.begin();
@@ -1078,7 +1079,7 @@ void Net<Dtype>::BuildLayerDiffCommunication() {
   for (int i = 0; i < ranks_read.size(); i++) {
     const int rank_remote = ranks_read[i];
 
-    std::vector<gaspi_rank_t> ranks_write_remote = GetDiffTreeWriteRanks(rank_remote);
+    std::vector<gaspi_rank_t> ranks_write_remote = GetDiffTreeWriteRanks(rank_remote, bf);
     long buffer_index_remote = 0;
     for (int j = 0; (j < ranks_write_remote.size()) && (ranks_write_remote[j] != rank_); j++) {
       buffer_index_remote++;
@@ -1094,32 +1095,41 @@ void Net<Dtype>::BuildLayerDiffCommunication() {
 }
 
 template <typename Dtype>
-std::vector<gaspi_rank_t> Net<Dtype>::GetDiffTreeWriteRanks(gaspi_rank_t rank) {
-  // setting highest set bit of rank to zero
-
-  static const long bit_max = 30;
-  std::vector<gaspi_rank_t> vr;
-  for (long i = bit_max; i >= 0; i--) {
-    const long shift = 1l<<i;
-    const long remote = long(rank) - shift;
-    if (remote >= 0l) {
-      vr.push_back(remote);
-      break;
-    }
-  }
-  return vr;
+int Net<Dtype>::GetDiffTreeBranchingFactor() const {
+  return 2;
 }
 
 template <typename Dtype>
-std::vector<gaspi_rank_t>  Net<Dtype>::GetDiffTreeReadRanks(gaspi_rank_t rank) {
-  static const long bit_max = 30;
+std::vector<gaspi_rank_t> Net<Dtype>::GetDiffTreeWriteRanks(
+  gaspi_rank_t rank, int branching_factor) const {
+  std::vector<gaspi_rank_t>  r;
+
+  if (rank > 0) {
+    long power = 1; // = branching_factor ** 0
+    while((power * branching_factor) <= long(rank)) {
+      power *= branching_factor;
+    }
+    r.push_back(long(rank) % power);
+  }
+  return r;
+}
+
+template <typename Dtype>
+std::vector<gaspi_rank_t>  Net<Dtype>::GetDiffTreeReadRanks(
+  gaspi_rank_t rank, int branching_factor) const {
   std::vector<gaspi_rank_t> r;
 
-  for (long level = bit_max;
-      (level >= 0) && ((1l<<level) > long(rank)); level--) {
-    const long shift = 1l<<level;
-    const long remote_rank = long(rank) + shift;
-    if (remote_rank < long(num_ranks_)) r.push_back(remote_rank);
+  long power = 1;
+  while (power < long(num_ranks_)) {
+    if (power > long(rank)) {
+      for(long i = 1; i < branching_factor; i++) {
+        long n = i * power + long(rank);
+        if (n < long(num_ranks_)) {
+          r.push_back(n);
+        }
+      }
+    }
+    power *= branching_factor;
   }
   return r;
 }

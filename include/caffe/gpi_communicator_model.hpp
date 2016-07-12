@@ -86,18 +86,18 @@ public:
   void Acknowledge(void);
   void UpdatedModelOnMaster(void);
   bool HaveUpdateSource(void) const;
-  bool Complete();
+  bool Complete() const;
 
   void status(std::ostream& s) const;
 
 private:
   CommunicatorModel(const CommunicatorModel<Dtype> &);
-  std::vector<gaspi_rank_t> GetDataTreeWriteRanks(gaspi_rank_t rank,
-                                                  gaspi_rank_t num_ranks,
-                                                  int branching_factor);
-  std::vector<gaspi_rank_t> GetDataTreeReadRanks(gaspi_rank_t rank,
-                                                 int branching_factor);
-  int GetDataTreeBranchingFactor(long num_ranks);
+  static std::vector<gaspi_rank_t> GetDataTreeWriteRanks(gaspi_rank_t rank,
+                                                         gaspi_rank_t num_ranks,
+                                                         int branching_factor);
+  static std::vector<gaspi_rank_t> GetDataTreeReadRanks(gaspi_rank_t rank,
+                                                        int branching_factor);
+  static int GetDataTreeBranchingFactor(long num_ranks);
 
   void UpdateStatus();
   void UpdateStatusCompleted();

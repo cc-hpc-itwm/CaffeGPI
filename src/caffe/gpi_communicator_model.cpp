@@ -270,7 +270,7 @@ bool CommunicatorModel<Dtype>::HaveUpdateSource(void) const {
 }
 
 template <typename Dtype>
-bool CommunicatorModel<Dtype>::Complete() {
+bool CommunicatorModel<Dtype>::Complete() const {
   return (status_completed_ == (acknowledgement_local_ + 1));
 }
 

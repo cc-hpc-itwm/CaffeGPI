@@ -1043,55 +1043,10 @@ template <typename Dtype>
 void Net<Dtype>::BuildLayerDiffCommunication() {
   const long buffer_size = //can store full model
     learnable_params_size_aggregated_.back() + 1;
-  const int bf = GetDiffTreeBranchingFactor();
-  std::vector<gaspi_rank_t> ranks_read = GetDiffTreeReadRanks(rank_, bf);
-  std::vector<gaspi_rank_t> ranks_write = GetDiffTreeWriteRanks(rank_, bf);
-
-  CheckAvailableSegments();
-  const long diff_segment_size
-    = std::max(buffer_size * (ranks_read.size() + ranks_write.size()), 1ul);
-  SUCCESS_OR_DIE(gaspi_segment_create(segment_id_diff_,
-                                      diff_segment_size * sizeof(Dtype),
-                                      GASPI_GROUP_ALL,
-                                      GASPI_BLOCK,
-                                      GASPI_MEM_UNINITIALIZED));
-
-  long buffer_index = 0;
-
-  for (int i = 0; i < ranks_write.size(); i++) {
-    const int rank_remote = ranks_write[i];
-
-    std::vector<gaspi_rank_t> ranks_read_remote = GetDiffTreeReadRanks(rank_remote, bf);
-    std::vector<gaspi_rank_t> ranks_write_remote = GetDiffTreeWriteRanks(rank_remote, bf);
-    const long buffer_index_remote = ranks_write_remote.size()
-        + std::find(ranks_read_remote.begin(), ranks_read_remote.end(), rank_)
-        - ranks_read_remote.begin();
-    
-    com_buffers_diff_write_.push_back(RingBufferWrite<Dtype>(
-      buffer_size, segment_id_diff_, notification_id_diff_ + buffer_index,
-      buffer_index * buffer_size * sizeof(Dtype),
-      rank_remote, segment_id_diff_, notification_id_diff_ + buffer_index_remote,
-      buffer_index_remote * buffer_size * sizeof(Dtype), queue_diff_));
-    com_buffers_diff_write_status_.push_back(0);
-    buffer_index++;
-  }
-
-  for (int i = 0; i < ranks_read.size(); i++) {
-    const int rank_remote = ranks_read[i];
-
-    std::vector<gaspi_rank_t> ranks_write_remote = GetDiffTreeWriteRanks(rank_remote, bf);
-    long buffer_index_remote = 0;
-    for (int j = 0; (j < ranks_write_remote.size()) && (ranks_write_remote[j] != rank_); j++) {
-      buffer_index_remote++;
-    }
-    com_buffers_diff_read_.push_back(RingBufferRead<Dtype>(
-      buffer_size, segment_id_diff_, notification_id_diff_ + buffer_index,
-      buffer_index * buffer_size * sizeof(Dtype),
-      ranks_read[i], segment_id_diff_, notification_id_diff_ + buffer_index_remote,
-      buffer_index_remote * buffer_size * sizeof(Dtype), queue_diff_));
-    com_buffers_diff_read_status_.push_back(0);
-    buffer_index ++;
-  }
+  com_buffers_diff_.push_back(shared_ptr<CommunicatorDiff<Dtype> > (
+    new CommunicatorDiff<Dtype>(buffer_size, notification_id_diff_,
+                                segment_id_diff_, queue_diff_, rank_,
+                                num_ranks_)));
 }
 
 template <typename Dtype>
@@ -1172,10 +1127,8 @@ void Net<Dtype>::BuildLayerDataCommunication() {
 
 template <typename Dtype>
 void Net<Dtype>::ResetCommunicationStatus(void) {
-  for (int i = 0; i < com_buffers_diff_read_status_.size(); i++)
-    com_buffers_diff_read_status_[i] = 0;
-  for (int i = 0; i < com_buffers_diff_write_status_.size(); i++)
-    com_buffers_diff_write_status_[i] = 0;
+  for (int i = 0; i < com_buffers_diff_.size(); i++)
+    com_buffers_diff_[i]->ResetCommunicationStatus();
   calculated_blobs_.resize(0);
   update_status_ = 0;
 }
@@ -1186,7 +1139,11 @@ void Net<Dtype>::AppendLayerToCalculatedBlobs(int index) {
 
   vector<shared_ptr<Blob<Dtype> > >& blobs = layers_[index].get()->blobs();
   for (int i = 0; i < blobs.size(); i++) {
-    calculated_blobs_.push_back(blobs[i].get());
+    Blob<Dtype>* blob = blobs[i].get();
+    calculated_blobs_.push_back(blob);
+    for (int k = 0; k < com_buffers_diff_.size(); k++) {
+      com_buffers_diff_[k]->AddCalculatedBlob(blob);
+    }
   }
 
   for (; j < calculated_blobs_.size(); j++) {
@@ -1199,29 +1156,8 @@ template <typename Dtype>
 void Net<Dtype>::CommunicateLayerDiff() {
   if (!gpi_communication_) return;
 
-  for (long i = 0; i < com_buffers_diff_read_.size(); i++) {
-    RingBufferRead<Dtype>& buffer = com_buffers_diff_read_[i];
-    while (com_buffers_diff_read_status_[i] < calculated_blobs_.size()) {
-      Blob<Dtype>& blob = *calculated_blobs_[com_buffers_diff_read_status_[i]];
-      if (buffer.Add(blob.mutable_cpu_diff(), blob.count())) {
-        break;
-      } else {
-        com_buffers_diff_read_status_[i]++;
-      }
-    }
-  }
-  for (long i = 0; i < com_buffers_diff_write_.size(); i++) {
-    RingBufferWrite<Dtype>& buffer = com_buffers_diff_write_[i];
-    while ((com_buffers_diff_write_status_[i] < calculated_blobs_.size())
-           && CommunicateLayerDiffReadFinished(com_buffers_diff_write_status_[i])) {
-      Blob<Dtype>& blob = *calculated_blobs_[com_buffers_diff_write_status_[i]];
-//todo aggregate diffs from other cpu too
-      if (buffer.Write(blob.cpu_diff(), blob.count())) {
-        break;
-      } else {
-        com_buffers_diff_write_status_[i]++;
-      }
-    }
+  for (int i = 0; i < com_buffers_diff_.size(); i++) {
+    (*com_buffers_diff_[i])();
   }
 }
 
@@ -1234,9 +1170,9 @@ void Net<Dtype>::CommunicateLayerDiffBlocking() {
 
 template <typename Dtype>
 bool Net<Dtype>::CommunicateLayerDiffFinished() {
-  int running = !CommunicateLayerDiffReadFinished(calculated_blobs_.size() - 1);
-  for (long i = 0; i < com_buffers_diff_write_status_.size(); i++) {
-    running |= (com_buffers_diff_write_status_[i] < calculated_blobs_.size());
+  int running = 0;
+  for (long i = 0; i < com_buffers_diff_.size(); i++) {
+    running |= !com_buffers_diff_[i]->CommunicateLayerDiffFinished();
   }
   return !running;
 }
@@ -1244,8 +1180,8 @@ bool Net<Dtype>::CommunicateLayerDiffFinished() {
 template <typename Dtype>
 bool Net<Dtype>::CommunicateLayerDiffReadFinished(int index) {
   int running = 0;
-  for (long i = 0; i < com_buffers_diff_read_status_.size(); i++) {
-    running |= (com_buffers_diff_read_status_[i] <= index);
+  for (long i = 0; i < com_buffers_diff_.size(); i++) {
+    running |= !com_buffers_diff_[i]->CommunicateLayerDiffReadFinished(index);
   }
   return !running;
 }

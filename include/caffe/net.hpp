@@ -14,6 +14,7 @@
 #include "caffe/proto/caffe.pb.h"
 #include "gpi_ring_buffer.hpp"
 #include "gpi_communicator_model.hpp"
+#include "gpi_communicator_diff.hpp"
 
 namespace caffe {
 
@@ -390,12 +391,9 @@ class Net {
   gaspi_rank_t rank_;
   gaspi_rank_t num_ranks_;
   vector<unsigned long> learnable_params_size_aggregated_;
-  vector<RingBufferRead<Dtype> > com_buffers_diff_read_;
-  vector<RingBufferWrite<Dtype> > com_buffers_diff_write_;
-  vector<int> com_buffers_diff_read_status_;
-  vector<int> com_buffers_diff_write_status_;
   vector<Blob<Dtype>* > calculated_blobs_;
   vector<shared_ptr<CommunicatorModel<Dtype> > > com_buffers_data_;
+  vector<shared_ptr<CommunicatorDiff<Dtype> > > com_buffers_diff_;
   int update_status_;
   gaspi_notification_id_t loss_buffer_index_;
   static const gaspi_queue_id_t queue_diff_ = 0;

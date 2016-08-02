@@ -300,7 +300,7 @@ class Net {
   void UpdateDebugInfo(const int param_id);
 
   // Communicate layers
-  void CheckAvailableSegments();
+  void CheckAvailableSegments(gaspi_segment_id_t id);
   void BuildLayerDiffCommunication();
   int GetDiffTreeBranchingFactor() const;
   std::vector<gaspi_rank_t> GetDiffTreeWriteRanks(gaspi_rank_t rank,

@@ -296,7 +296,7 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
       learnable_params_size_aggregated_.push_back(learnable_params_size_aggregated_.back() + s);
     }
     loss_buffer_index_ = 0;
-    CheckAvailableSegments();
+    CheckAvailableSegments(segment_id_loss_);
     const long loss_segment_size = 2 * num_ranks_;
     SUCCESS_OR_DIE(gaspi_segment_create(segment_id_loss_,
                                         loss_segment_size * sizeof(Dtype),
@@ -1028,12 +1028,12 @@ void Net<Dtype>::ToHDF5(const string& filename, bool write_diff) const {
 }
 
 template <typename Dtype>
-void Net<Dtype>::CheckAvailableSegments() {
+void Net<Dtype>::CheckAvailableSegments(gaspi_segment_id_t id) {
   gaspi_number_t segment_num;
   SUCCESS_OR_DIE(gaspi_segment_num(&segment_num));
   gaspi_number_t segment_max;
   SUCCESS_OR_DIE(gaspi_segment_max(&segment_max));
-  if (segment_num >= segment_max) {
+  if ((segment_num >= segment_max) || (id >= segment_max)) {
     LOG(ERROR) << "Not enough GASPI segments!" << std::endl;
     exit(EXIT_FAILURE);
   }
@@ -1041,6 +1041,7 @@ void Net<Dtype>::CheckAvailableSegments() {
 
 template <typename Dtype>
 void Net<Dtype>::BuildLayerDiffCommunication() {
+  CheckAvailableSegments(notification_id_diff_);
   const long buffer_size = //can store full model
     learnable_params_size_aggregated_.back() + 1;
   com_buffers_diff_.push_back(shared_ptr<CommunicatorDiff<Dtype> > (
@@ -1098,7 +1099,7 @@ void Net<Dtype>::BuildLayerDataCommunication() {
       vector<shared_ptr<Blob<Dtype> > >& blobs = layers_[i].get()->blobs();
       for (int j = 0; j < blobs.size(); j++) {
         Blob<Dtype>* p = blobs[j].get();
-        CheckAvailableSegments();
+        CheckAvailableSegments(segment_id);
         com_buffers_data_.push_back(shared_ptr<CommunicatorModel<Dtype> > (
           new CommunicatorModel<Dtype>(
             p, segment_id, queue_data_write, queue_data_acknowledge_, rank_,

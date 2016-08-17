@@ -146,12 +146,16 @@ template <typename Dtype>
 CommunicatorModel<Dtype>::CommunicatorModel(
   Blob<Dtype>* blob,
   const gaspi_segment_id_t segment_id,
+  const gaspi_notification_id_t notification_base_id,
+  const long notification_id_num,
   const gaspi_queue_id_t queue_transfer,
   const gaspi_queue_id_t queue_acknowledge,
   const gaspi_rank_t rank,
   const gaspi_rank_t num_ranks)
 : blob_(blob),
   segment_id_(segment_id),
+  notification_base_id_(notification_base_id),
+  notification_id_num_(notification_id_num),
   queue_send_(queue_transfer),
   queue_acknowledge_(queue_acknowledge),
   acknowledgement_local_(0),
@@ -160,9 +164,11 @@ CommunicatorModel<Dtype>::CommunicatorModel(
   acknowledgement_total_(0) {
 
   const long segment_size =  blob->count() * sizeof(Dtype);
-  SUCCESS_OR_DIE(gaspi_segment_use(segment_id_, blob->mutable_cpu_data(),
-                                   segment_size, GASPI_GROUP_ALL,
-                                   GASPI_BLOCK, 0));
+  {
+    gaspi_pointer_t ptr;
+    SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_, &ptr));
+    buffer_offset_ = ((char*)blob->cpu_data()) - ((char*)ptr);
+  }
 
   const int bf = GetDataTreeBranchingFactor(num_ranks);
   std::vector<gaspi_rank_t> ranks_read = GetDataTreeReadRanks(rank, bf);
@@ -180,6 +186,10 @@ CommunicatorModel<Dtype>::CommunicatorModel(
     const long buffer_index_remote = ranks_write_remote.size()
         + std::find(ranks_read_remote.begin(), ranks_read_remote.end(), rank)
         - ranks_read_remote.begin();
+    CHECK(buffer_index < notification_id_num_)
+      << "Not engough notification IDs";
+    CHECK(buffer_index_remote < notification_id_num_)
+      << "Not engough notification IDs";
 
     producer_.push_back(TransferForwardProducer(
       segment_size, rank_remote, segment_id, buffer_offset_, buffer_offset_,
@@ -196,17 +206,16 @@ CommunicatorModel<Dtype>::CommunicatorModel(
     const long buffer_index_remote =
         std::find(ranks_write_remote.begin(), ranks_write_remote.end(), rank)
         - ranks_write_remote.begin();
+    CHECK(buffer_index < notification_id_num_)
+      << "Not engough notification IDs";
+    CHECK(buffer_index_remote < notification_id_num_)
+      << "Not engough notification IDs";
 
     consumer_.push_back(TransferForwardConsumer(
       rank_remote, segment_id, notification_base_id_ + buffer_index,
       notification_base_id_ + buffer_index_remote, queue_acknowledge));
     buffer_index++;
   }
-}
-
-template <typename Dtype>
-CommunicatorModel<Dtype>::~CommunicatorModel() {
-  SUCCESS_OR_DIE(gaspi_segment_delete(segment_id_));
 }
 
 template <typename Dtype>

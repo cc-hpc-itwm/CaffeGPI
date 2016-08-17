@@ -75,12 +75,12 @@ public:
 
   CommunicatorModel(Blob<Dtype>* blob,
                     const gaspi_segment_id_t segment_id,
+                    const gaspi_notification_id_t notification_base_id,
+                    const long notification_id_num,
                     const gaspi_queue_id_t queue_transfer,
                     const gaspi_queue_id_t queue_acknowledge,
                     const gaspi_rank_t rank,
                     const gaspi_rank_t num_ranks);
-  ~CommunicatorModel();
-
 
   void operator()(void);
   void Acknowledge(void);
@@ -103,8 +103,9 @@ private:
   void UpdateStatusCompleted();
   void UpdateAcknowledgementTotal();
 
-  static const long buffer_offset_ = 0;
-  static const long notification_base_id_ = 1000;
+  long buffer_offset_;
+  const long notification_base_id_;
+  const long notification_id_num_;
 
   Blob<Dtype>* blob_;
   gaspi_segment_id_t segment_id_;

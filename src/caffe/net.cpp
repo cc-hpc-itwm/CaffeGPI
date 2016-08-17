@@ -42,6 +42,14 @@ Net<Dtype>::Net(const string& param_file, Phase phase, const Net* root_net)
 template <typename Dtype>
 Net<Dtype>::~Net() {
   if (gpi_communication_) {
+#ifndef CPU_ONLY
+    if (Caffe::mode() == Caffe::GPU) {
+      gaspi_pointer_t ptr;
+      SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_data_, &ptr));
+      CUDA_CHECK(cudaFreeHost(ptr));
+    }
+#endif
+    SUCCESS_OR_DIE(gaspi_segment_delete(segment_id_data_));
     SUCCESS_OR_DIE(gaspi_segment_delete(segment_id_diff_));
     SUCCESS_OR_DIE(gaspi_segment_delete(segment_id_loss_));
   }
@@ -1093,21 +1101,78 @@ std::vector<gaspi_rank_t>  Net<Dtype>::GetDiffTreeReadRanks(
 template <typename Dtype>
 void Net<Dtype>::BuildLayerDataCommunication() {
 
-  int segment_id = segment_id_data_base_;
+  long segment_size = 0;
+  long num_blobs = 0;
   for (int i = layers_.size() - 1; i >= 0; --i) {
     if (layer_need_backward_[i]) {
       vector<shared_ptr<Blob<Dtype> > >& blobs = layers_[i].get()->blobs();
       for (int j = 0; j < blobs.size(); j++) {
         Blob<Dtype>* p = blobs[j].get();
-        CheckAvailableSegments(segment_id);
-        com_buffers_data_.push_back(shared_ptr<CommunicatorModel<Dtype> > (
-          new CommunicatorModel<Dtype>(
-            p, segment_id, queue_data_write, queue_data_acknowledge_, rank_,
-            num_ranks_)));
-        segment_id++;
+        segment_size += p->count();
+        num_blobs++;
       }
     }
   }
+
+  CheckAvailableSegments(segment_id_data_);
+#ifndef CPU_ONLY
+  if (Caffe::mode() == Caffe::GPU) {
+    void* ptr;
+    CUDA_CHECK(cudaMallocHost(&ptr, segment_size * sizeof(Dtype)));
+    SUCCESS_OR_DIE(gaspi_segment_use(segment_id_data_, ptr,
+                                     segment_size * sizeof(Dtype),
+                                     GASPI_GROUP_ALL,
+                                     GASPI_BLOCK, 0));
+  }
+  else
+#endif
+  {
+    SUCCESS_OR_DIE(gaspi_segment_create(segment_id_data_,
+                                        segment_size * sizeof(Dtype),
+                                        GASPI_GROUP_ALL,
+                                        GASPI_BLOCK,
+                                        GASPI_MEM_UNINITIALIZED));
+  }
+
+  gaspi_number_t notification_num_total;
+  SUCCESS_OR_DIE(gaspi_notification_num(&notification_num_total));
+
+  gaspi_pointer_t ptr;
+  SUCCESS_OR_DIE(gaspi_segment_ptr(segment_id_data_, &ptr));
+  Dtype* base_ptr = (Dtype*) ptr;
+
+  int iblob = 0;
+
+  for (int i = layers_.size() - 1; i >= 0; --i) {
+    if (layer_need_backward_[i]) {
+      vector<shared_ptr<Blob<Dtype> > >& blobs = layers_[i].get()->blobs();
+      for (int j = 0; j < blobs.size(); j++) {
+        Blob<Dtype>& blob = *(blobs[j].get());
+
+        const long size = blob.count();
+        Dtype* tmp = new Dtype[size];
+        memcpy(tmp, blob.mutable_cpu_data(), size * sizeof(Dtype));
+        blob.set_cpu_data(base_ptr);
+        base_ptr += size;
+        memcpy(blob.mutable_cpu_data(), tmp, size * sizeof(Dtype));
+        delete[] tmp;
+
+        const long notification_base_id
+          = (iblob * notification_num_total + num_blobs - 1) / num_blobs;
+        const long notification_num_local
+          = ((iblob + 1) * notification_num_total + num_blobs - 1) / num_blobs
+            - notification_base_id;
+        iblob++;
+        com_buffers_data_.push_back(shared_ptr<CommunicatorModel<Dtype> > (
+          new CommunicatorModel<Dtype>(
+            &blob, segment_id_data_, notification_base_id, notification_num_local,
+            queue_data_write, queue_data_acknowledge_, rank_,
+            num_ranks_)));
+      }
+    }
+  }
+
+  SUCCESS_OR_DIE(gaspi_barrier(GASPI_GROUP_ALL, GASPI_BLOCK));
 
 //   for (int rank=0; rank < num_ranks_; rank++) {
 //     if (rank==rank_) {
@@ -1122,7 +1187,6 @@ void Net<Dtype>::BuildLayerDataCommunication() {
 //     sleep(5);
 //   }
 //   sleep(10);
-   //------------------------------------------------------------------------
 
 }
 

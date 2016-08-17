@@ -402,7 +402,7 @@ class Net {
   static const gaspi_queue_id_t queue_data_acknowledge_ = 6;
   static const gaspi_queue_id_t queue_loss_ = 2;
   static const gaspi_segment_id_t segment_id_diff_ = 0;
-  static const gaspi_segment_id_t segment_id_data_base_ = 2;
+  static const gaspi_segment_id_t segment_id_data_ = 2;
   static const gaspi_segment_id_t segment_id_loss_ = 1;
   static const gaspi_notification_id_t notification_id_diff_ = 0;
   static const gaspi_notification_id_t notification_id_data_ = 0;

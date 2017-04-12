@@ -104,7 +104,7 @@ TransferForwardConsumer::TransferForwardConsumer(
     status_(0){
   gaspi_config_t config;
   SUCCESS_OR_DIE(gaspi_config_get(&config));
-  queue_depth_ = config.queue_depth;
+  queue_depth_ = config.queue_size_max;
 }
 
 unsigned long TransferForwardConsumer::GetStatus(void) {

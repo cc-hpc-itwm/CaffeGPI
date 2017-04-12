@@ -87,7 +87,7 @@ static BrewFunction GetBrewFunction(const caffe::string& name) {
 }
 
 // Parse GPU ids or use all available devices
-static void get_gpus(vector<int>* gpus) {
+static void get_gpus(vector<int>* gpus, int rank_id=0) {
   if (FLAGS_gpu == "all") {
     int count = 0;
 #ifndef CPU_ONLY
@@ -98,7 +98,9 @@ static void get_gpus(vector<int>* gpus) {
     for (int i = 0; i < count; ++i) {
       gpus->push_back(i);
     }
-  } else if (FLAGS_gpu.size()) {
+  }else if (FLAGS_gpu == "auto") { 
+    gpus->push_back(rank_id);
+  }else if (FLAGS_gpu.size()) {
     vector<string> strings;
     boost::split(strings, FLAGS_gpu, boost::is_any_of(","));
     for (int i = 0; i < strings.size(); ++i) {
@@ -180,12 +182,16 @@ caffe::SolverAction::Enum GetRequestedAction(
 // Train / Finetune a model.
 int train() {
   SUCCESS_OR_DIE(gaspi_proc_init(GASPI_BLOCK));
-
+  gaspi_rank_t currentRank=0;
+  SUCCESS_OR_DIE( gaspi_proc_rank(&currentRank));
+  LOG(INFO) << "GASPI Init done for RANK: "<<currentRank;
+	
 
   CHECK_GT(FLAGS_solver.size(), 0) << "Need a solver definition to train.";
   CHECK(!FLAGS_snapshot.size() || !FLAGS_weights.size())
       << "Give a snapshot to resume training or weights to finetune "
       "but not both.";
+
   vector<string> stages = get_stages_from_flags();
 
   caffe::SolverParameter solver_param;
@@ -210,7 +216,7 @@ int train() {
   }
 
   vector<int> gpus;
-  get_gpus(&gpus);
+  get_gpus(&gpus, currentRank);
   if (gpus.size() == 0) {
     LOG(INFO) << "Use CPU.";
     Caffe::set_mode(Caffe::CPU);
@@ -219,7 +225,7 @@ int train() {
     for (int i = 0; i < gpus.size(); ++i) {
       s << (i ? ", " : "") << gpus[i];
     }
-    LOG(INFO) << "Using GPUs " << s.str();
+    LOG(INFO) << "Rank "<<currentRank<<" Using GPUs " << s.str();
 #ifndef CPU_ONLY
     cudaDeviceProp device_prop;
     for (int i = 0; i < gpus.size(); ++i) {

@@ -108,7 +108,7 @@ int main() {
 
   gaspi_config_t config;
   SUCCESS_OR_DIE(gaspi_config_get (&config));
-  std::cout << config.queue_size_max << std::endl;
+  std::cout << config.queue_depth << std::endl;
 
 
   gaspi_rank_t nRanks;

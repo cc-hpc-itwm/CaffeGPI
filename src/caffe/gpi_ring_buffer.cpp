@@ -37,7 +37,7 @@ RingBufferWrite<Dtype>::RingBufferWrite(const unsigned long buffer_size,
 
     gaspi_config_t config;
     SUCCESS_OR_DIE(gaspi_config_get(&config));
-    queue_depth_ = config.queue_size_max;
+    queue_depth_ = config.queue_depth;
 }
 
 template <typename Dtype>
@@ -174,7 +174,7 @@ RingBufferRead<Dtype>::RingBufferRead(const unsigned long buffer_size,
 
     gaspi_config_t config;
     SUCCESS_OR_DIE(gaspi_config_get(&config));
-    queue_depth_ = config.queue_size_max;
+    queue_depth_ = config.queue_depth;
 }
 
 template <typename Dtype>

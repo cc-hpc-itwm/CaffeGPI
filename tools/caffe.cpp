@@ -31,7 +31,9 @@ DEFINE_string(gpu, "",
     "Optional; run in GPU mode on given device IDs separated by ','."
     "Use '-gpu all' to run on all available GPUs. The effective training "
     "batch size is multiplied by the number of devices."
-    "Use '-gpu auto' for distributed multi GPU systems.");
+    "Use '-gpu auto' for single node multi GPU systems."
+    "Use '-gpu auto-2' for distributed 2 GPU systems."
+    "Use '-gpu auto-4' for distributed 4 GPU systems.");
 DEFINE_string(solver, "",
     "The solver definition protocol buffer text file.");
 DEFINE_string(model, "",
@@ -101,6 +103,10 @@ static void get_gpus(vector<int>* gpus, int rank_id=0) {
     }
   }else if (FLAGS_gpu == "auto") { 
     gpus->push_back(rank_id);
+  }else if (FLAGS_gpu == "auto-2") {
+    gpus->push_back(rank_id%2);
+  }else if (FLAGS_gpu == "auto-4") {
+    gpus->push_back(rank_id%4);
   }else if (FLAGS_gpu.size()) {
     vector<string> strings;
     boost::split(strings, FLAGS_gpu, boost::is_any_of(","));

@@ -9,9 +9,8 @@
 
 #define SUCCESS_OR_DIE(f...)                                            \
 do                                                                      \
-{                                                                       \
+{									\
     const gaspi_return_t r = f;                                         \
-                         						\
     if (r != GASPI_SUCCESS)                                             \
     {                                          				\
         std::cout << std::getenv("HOSTNAME") <<" "<<r<< " '" << "' CAFFE FAIL at " << __FILE__<< " "<<__LINE__<<std::endl;   \

@@ -73,14 +73,17 @@ a)
 Change all the paths in your net and solver files to absolute paths.
 
 b)
-Replace all your data_param layers with "parallel_data_param" layers
-in your net.
+Modify all the layers in your net that read the training data. Switch the
+"type" from "Data" to "ParallelData" and the keyword "data_param" to
+"parallel_data_param".
 
 c)
-Reduce the batch sizes in all the data_param layers according to the size
-of your machine file. If a final batch size of 256 is intended and your
-machine runs on 4 CaffeGPI processes, then provide a batch size of 64 in
-the specification of your net.
+Reduce the batch sizes of all the layers addressed in b) according to the size
+of your machine file. This is because the effective batch size of the
+"ParallelData" layer is the "batch_size" provided times the number of Caffe
+processes. E.g., if a final batch size of 256 is intended and your
+machine runs on 4 CaffeGPI processes, then set "batch_size" to 64 in
+your "parallel_data_param" blocks.
 
 9)
 Start CaffeGPI:

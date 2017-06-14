@@ -22,6 +22,10 @@ Framework development discussions and thorough bug reports are collected on [Iss
 
 Happy brewing!
 
+# CaffeGPI Extension
+
+This fork is dedicated to extend Caffe efficiently to distributed memory machines. The GPI-2 communication library is used for inter node data transfers. Check additional installation instructions in INSTALL_CaffeGPI.md.
+
 ## License and Citation
 
 Caffe is released under the [BSD 2-Clause license](https://github.com/BVLC/caffe/blob/master/LICENSE).
